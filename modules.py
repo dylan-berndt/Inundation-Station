@@ -39,6 +39,33 @@ class PositionalEncoding(nn.Module):
         return self.encoding(x, indices)
 
 
+class DualProjection(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        self.embeddings = nn.ModuleList([
+            nn.Embedding(varRange, config.discreteDim) for varRange in config.discreteRange
+        ])
+
+        self.encoding = nn.Linear(config.numContinuous, config.continuousDim)
+
+        self.encodingDim = config.discreteDim * len(config.discreteRange) + config.continuousDim
+
+        self.dropout = nn.Dropout(config.dropout)
+        self.fc = nn.Linear(self.encodingDim, config.outputDim)
+
+    def forward(self, c, d):
+        embeddings = [emb(d[:, :, i]) for i, emb in enumerate(self.embeddings)]
+        embeddings = torch.cat(embeddings, dim=-1)
+        encodings = self.encoding(c)
+
+        encodings = torch.cat([embeddings, encodings], dim=-1)
+
+        encodings = self.fc(self.dropout(encodings))
+
+        return encodings
+
+
 class CMAL(nn.Module):
     def __init__(self, inputDim, hiddenDim, mixtures):
         super().__init__()

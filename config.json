@@ -1,0 +1,33 @@
+{
+  "cmal": {
+    "inputDim": 64,
+    "hiddenDim": 128,
+    "mixtures": 16
+  },
+
+  "encoderProjection": {
+    "discreteDim": 3,
+    "discreteRange": null,
+    "continuousDim": 64
+  },
+
+  "encoderGAT": {
+
+  },
+
+  "encoderLSTM": {
+
+  },
+
+  "decoderProjection": {
+
+  },
+
+  "decoderGAT": {
+
+  },
+
+  "decoderLSTM": {
+
+  }
+}
