@@ -1,4 +1,5 @@
 {
+  "path": "data",
   "cmal": {
     "inputDim": 64,
     "hiddenDim": 128,

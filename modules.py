@@ -92,6 +92,7 @@ class CMAL(nn.Module):
         return m, b, t, p
 
 
+# I might be stupid
 class BatchNorm(nn.Module):
     def __init__(self, hiddenDim):
         super().__init__()
