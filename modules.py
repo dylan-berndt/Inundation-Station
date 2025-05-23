@@ -47,8 +47,6 @@ class DualProjection(nn.Module):
             nn.Embedding(varRange, config.discreteDim) for varRange in config.discreteRange
         ])
 
-        self.encoding = nn.Linear(config.numContinuous, config.continuousDim)
-
         self.encodingDim = config.discreteDim * len(config.discreteRange) + config.continuousDim
 
         self.dropout = nn.Dropout(config.dropout)
@@ -57,11 +55,10 @@ class DualProjection(nn.Module):
     def forward(self, c, d):
         embeddings = [emb(d[:, :, i]) for i, emb in enumerate(self.embeddings)]
         embeddings = torch.cat(embeddings, dim=-1)
-        encodings = self.encoding(c)
 
-        encodings = torch.cat([embeddings, encodings], dim=-1)
+        encodings = torch.cat([embeddings, c], dim=-1)
 
-        encodings = self.fc(self.dropout(encodings))
+        encodings = self.dropout(self.fc(encodings))
 
         return encodings
 
