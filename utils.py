@@ -28,6 +28,12 @@ class Config:
         else:
             self._values[key] = value
 
+    def __setitem__(self, key, value):
+        if key == "_values":
+            object.__setattr__(self, key, value)
+        else:
+            self._values[key] = value
+
     def load(self, path):
         with open(path, "r") as file:
             data = json.load(file)

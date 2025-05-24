@@ -46,7 +46,7 @@ class InundationStation(nn.Module):
 
     def forward(self, inputs):
         # shape: [batchSize, basins, timesteps, features]
-        basinContinuous = torch.concatenate([inputs["era5"], inputs["basinContinuous"])
+        basinContinuous = torch.concatenate([inputs["era5"], inputs["basinContinuous"]])
         projected = self.encoderBasinProjection(basinContinuous, inputs["basinDiscrete"])
         shape = projected.shape
         # shape: [batchSize * timesteps, basins, features]
@@ -74,7 +74,7 @@ class InundationStation(nn.Module):
 
         hidden, cell = self.hiddenBridge(hidden), self.cellBridge(cell)
 
-        basinContinuous = torch.concatenate([inputs["era5"], inputs["basinContinuous"])
+        basinContinuous = torch.concatenate([inputs["era5"], inputs["basinContinuous"]])
         projected = self.decoderBasinProjection(basinContinuous, inputs["basinDiscrete"])
         shape = projected.shape
         # shape: [batchSize * timesteps, basins, features]
