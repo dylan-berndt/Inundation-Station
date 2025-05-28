@@ -13,24 +13,24 @@ class InundationStation(nn.Module):
         self.config = config
 
         self.encoderBasinProjection = DualProjection(config.encoderBasinProjection)
-        self.encoderBasinGAT = gnn.models.GAT(config.encoderGAT)
+        self.encoderBasinGAT = gnn.models.GAT(**config.encoderGAT)
 
         self.encoderRiverProjection = DualProjection(config.encoderRiverProjection)
-        self.encoderLSTM = nn.LSTM(config.encoderLSTM, batch_first=True)
+        self.encoderLSTM = nn.LSTM(**config.encoderLSTM, batch_first=True)
 
         self.hindcastHead = CMAL(config.encoderHead)
 
         self.hiddenBridge = nn.Sequential(
-            nn.Linear(config.bridge),
+            nn.Linear(**config.bridge),
             nn.Tanh()
         )
-        self.cellBridge = nn.Linear(config.bridge)
+        self.cellBridge = nn.Linear(**config.bridge)
 
         self.decoderBasinProjection = DualProjection(config.decoderBasinProjection)
-        self.decoderBasinGAT = gnn.models.GAT(config.decoderGAT)
+        self.decoderBasinGAT = gnn.models.GAT(**config.decoderGAT)
 
         self.decoderRiverProjection = DualProjection(config.decoderRiverProjection)
-        self.decoderLSTM = nn.LSTM(config.decoderLSTM, batch_first=True)
+        self.decoderLSTM = nn.LSTM(**config.decoderLSTM, batch_first=True)
 
         self.forecastHead = CMAL(config.decoderHead)
 

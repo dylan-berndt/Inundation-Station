@@ -93,7 +93,7 @@ class InundationData(Dataset):
             df = pd.read_csv(filePath, encoding="latin1", comment="#", delimiter=";")
 
             df['YYYY-MM-DD'] = pd.to_datetime(df['YYYY-MM-DD'], errors="coerce")
-            # Convert to days as integers, makes things cleaner later
+            # Convert to days as integers, makes things cleaner later probably
             df["YYYY-MM-DD"] = df["YYYY-MM-DD"].apply(lambda x: x.timestamp() // 86400).astype(int)
 
             values = df[" Value"].to_numpy()
@@ -207,9 +207,20 @@ class InundationData(Dataset):
         self.basinContinuousScales = {}
         self.riverContinuousScales = {}
 
-        # TODO: Pass continuous dimensions; discrete ranges to config
         self.basinDiscreteColumnRanges = []
         self.riverDiscreteColumnRanges = []
+
+        # This stinks
+        config.encoderBasinProjection.continuousDim = len(self.basinContinuous.columns)
+        config.decoderBasinProjection.continuousDim = len(self.basinContinuous.columns)
+        config.encoderRiverProjection.continuousDim = len(self.riverContinuous.columns)
+        config.decoderRiverProjection.continuousDim = len(self.riverContinuous.columns)
+
+        # Like bad
+        config.encoderBasinProjection.discreteRanges = self.basinDiscreteColumnRanges
+        config.decoderBasinProjection.discreteRanges = self.basinDiscreteColumnRanges
+        config.encoderRiverProjection.discreteRanges = self.riverDiscreteColumnRanges
+        config.decoderRiverProjection.discreteRanges = self.riverDiscreteColumnRanges
 
         for column in basinContinuousColumns:
             mean, std = self.basinContinuous[column].mean(), self.basinContinuous[column].std()
@@ -280,7 +291,7 @@ class InundationData(Dataset):
         riverContinuous = torch.from_numpy(self.riverContinuous.loc[grdcID].to_numpy())
         riverDiscrete = torch.from_numpy(self.riverDiscrete.loc[grdcID].to_numpy(dtype=np.int32))
 
-        structure = torch.transpose(torch.tensor(self.upstreamStructure[pfafID], dtype=torch.long))
+        structure = torch.transpose(torch.tensor(self.upstreamStructure[pfafID], dtype=torch.long)).contiguous()
 
         data = Data(
             era5History=era5History,
