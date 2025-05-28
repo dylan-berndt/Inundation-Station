@@ -41,13 +41,22 @@ def calculateReturnPeriods(df, periods=None):
     return returnVals
 
 
+def defaultNoise(minNoise, maxNoise):
+    def noiseData(data, axis=1):
+        noiseMult = torch.linspace(minNoise, maxNoise, data.shape[axis])
+        noise = torch.rand_like(data) * noiseMult
+        return data + noise
+
+    return noiseData
+
+
 class InundationData(Dataset):
-    def __init__(self, config, location="NA"):
+    def __init__(self, config, location="NA", noise=defaultNoise(0.3, 0.7)):
         self.config = config
 
-        # River data including RiverATLAS and GRDC
+        self.forecastNoise = noise
+
         grdcDict = {}
-        # Basin data including BasinATLAS and ERA5
         pfafDict = {}
 
         # Maps from GRDC ID to Pfafstetter ID
@@ -120,6 +129,9 @@ class InundationData(Dataset):
 
             print(f"\r{f + 1}/{len(era5Paths)} ERA5 files queued", end="")
 
+        with open("scales.json", "r") as file:
+            self.era5Scales = json.load(file)
+
         print()
 
         self.basinATLAS = gpd.read_file(os.path.join(config.path, "BasinATLAS_v10_shp", "BasinATLAS_v10_lev07.shp"))
@@ -187,7 +199,6 @@ class InundationData(Dataset):
 
         self.basinATLAS = self.basinATLAS.set_index("PFAF_ID")
 
-        # TODO: Proper indexing with grdcID and pfafID?
         self.basinContinuous = self.basinATLAS[basinContinuousColumns]
         self.basinDiscrete = self.basinATLAS[basinDiscreteColumns]
         self.riverContinuous = riverSHP[riverContinuousColumns]
@@ -196,6 +207,7 @@ class InundationData(Dataset):
         self.basinContinuousScales = {}
         self.riverContinuousScales = {}
 
+        # TODO: Pass continuous dimensions; discrete ranges to config
         self.basinDiscreteColumnRanges = []
         self.riverDiscreteColumnRanges = []
 
@@ -225,7 +237,6 @@ class InundationData(Dataset):
     def __len__(self):
         return len(self.indexMap)
 
-    # TODO: ERA5 data standardization
     def __getitem__(self, i):
         grdcID = self.indexMap[i]
         grdc = self.grdcDict[grdcID]
@@ -236,6 +247,8 @@ class InundationData(Dataset):
 
         offset = self.offsetMap[i]
 
+        riverTime = riverTime[offset: offset + self.config.history + self.config.future]
+
         dischargeHistory = riverStage[offset: offset + self.config.history]
         dischargeHistory = (dischargeHistory - self.targetMean) / self.targetDev
 
@@ -245,15 +258,20 @@ class InundationData(Dataset):
         thresholds = self.grdcDict[pfafID]["Thresholds"]
         thresholds = [(threshold - self.targetMean) / self.targetDev for threshold in thresholds]
 
-        # TODO: Sample dates
         basinERA5Data = []
         for basin in upstreamBasins:
             era5Path = self.pfafDict[basin]["Parquet_Path"]
             query = f"SELECT * FROM {era5Path} WHERE date >= {riverTime[0]} AND date <= {riverTime[-1]}"
             df = duckdb.query(query).to_df()
+            for column in df.columns:
+                df[column] = (df[column] - self.era5Scales[column][0]) / self.era5Scales[column][1]
             basinERA5Data.append(torch.from_numpy(df.to_numpy()))
 
-        era5History = torch.stack(basinERA5Data, dim=0)
+        era5Data = torch.stack(basinERA5Data, dim=0)
+        era5History = era5Data[:, :config.history]
+        era5Future = era5Data[:, -config.future:]
+
+        era5Future = self.forecastNoise(era5Future)
 
         basinContinuous = [torch.from_numpy(self.basinContinuous.loc[basinID].to_numpy()) for basinID in upstreamBasins]
         basinDiscrete = [torch.from_numpy(self.basinDiscrete.loc[basinID].to_numpy(dtype=np.int32)) for basinID in
@@ -265,7 +283,8 @@ class InundationData(Dataset):
         structure = torch.transpose(torch.tensor(self.upstreamStructure[pfafID], dtype=torch.long))
 
         data = Data(
-            era5=era5History,
+            era5History=era5History,
+            era5Future=era5Future,
             basinContinuous=basinContinuous,
             basinDiscrete=basinDiscrete,
             edge_index=structure,
@@ -285,7 +304,8 @@ class InundationData(Dataset):
         data = f"""
         Total Samples: {len(self)}
         Sample 0: 
-        Era5: {sample.era5.shape} {sample.era5.dtype}
+        Era5 History: {sample.era5History.shape} {sample.era5History.dtype}
+        Era5 Future: {sample.era5Future.shape} {sample.era5Future.dtype}
         Basin Continuous: {sample.basinContinuous.shape} {sample.basinContinuous.dtype}
         Basin Discrete: {sample.basinDiscrete.shape} {sample.basinDiscrete.dtype}
         Structure: {sample.edge_index.shape} {sample.edge_index.dtype}
@@ -333,6 +353,9 @@ if __name__ == "__main__":
 
     if len(glob(os.path.join(config.path, "series", "ERA5_Parquet", "*.parquet"))) < 1:
         csvToParquet(os.path.join(config.path, "series", "ERA5"), os.path.join(config.path, "series", "ERA5_Parquet"))
+
+    if not os.path.exists("scales.json"):
+        era5Scales(os.path.join(config.path, "series", "ERA5 Parquet"))
 
     dataset = InundationData(config)
     dataset.info()

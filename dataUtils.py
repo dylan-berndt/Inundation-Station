@@ -4,6 +4,9 @@ import geopandas as gpd
 from glob import glob
 import os
 
+import json
+import math
+
 
 def getGRDCDataframe(path):
     folderGRDC = os.path.join(path, "series", "GRDC", "*.txt")
@@ -118,4 +121,35 @@ def classifyColumns(df, config, name):
         seenPrefixes[prefix] = [True, continuous]
 
     return config
+
+
+def era5Scales(path):
+    iterations = 0
+    scales = {}
+
+    files = glob(os.path.join(path, "*.parquet"))
+    for f, filePath in enumerate(files):
+        df = pd.read_parquet(filePath)
+
+        iterations += len(df)
+
+        for column in df.columns:
+            if column not in scales:
+                mean = df[column].mean()
+                m2 = ((df[column] - mean) ** 2).sum()
+                scales[column] = mean, m2
+                continue
+
+            mean, m2 = scales[column]
+
+            newMean = df[column].mean()
+            newM2 = ((df[column] - mean) ** 2).sum()
+
+            scales[column] = scales[column][0] + newMean / iterations, scales[column][1] + newM2
+
+    for column in scales:
+        scales[column] = scales[column][0], math.sqrt(scales[column][1] / iterations)
+
+    with open("scales.json", "w") as file:
+        json.dump(scales, file)
 
