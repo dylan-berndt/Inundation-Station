@@ -3,21 +3,36 @@
     "batchSize": 128,
     "history": 365,
     "future": 7,
-    "cmal": {
-        "inputDim": 64,
-        "hiddenDim": 128,
-        "mixtures": 16
+    "encoderBasinProjection": {
+        
     },
-    "encoderProjection": {
-        "discreteDim": 3,
-        "discreteRange": null,
-        "continuousDim": 64
+    "encoderRiverProjection": {
+        
     },
-    "encoderGAT": {},
-    "encoderLSTM": {},
-    "decoderProjection": {},
-    "decoderGAT": {},
-    "decoderLSTM": {},
+    "encoderGAT": {
+
+    },
+    "encoderLSTM": {
+
+    },
+    "encoderHead": {
+        
+    },
+    "decoderBasinProjection": {
+        
+    },
+    "decoderRiverProjection": {
+        
+    },
+    "decoderGAT": {
+
+    },
+    "decoderLSTM": {
+
+    },
+    "decoderHead": {
+
+    },
     "includeFuture": false,
     "variables": {
         "river": {

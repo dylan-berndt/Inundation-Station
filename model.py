@@ -13,36 +13,26 @@ class InundationStation(nn.Module):
         self.config = config
 
         self.encoderBasinProjection = DualProjection(config.encoderBasinProjection)
-
-        self.encoderBasinGAT = gnn.models.GAT(config.contextEncoderDim, config.contextEncoderDim,
-                                         config.contextEncoderLayers, config.contextEncoderDim,
-                                         config.contextDropout)
+        self.encoderBasinGAT = gnn.models.GAT(config.encoderGAT)
 
         self.encoderRiverProjection = DualProjection(config.encoderRiverProjection)
+        self.encoderLSTM = nn.LSTM(config.encoderLSTM, batch_first=True)
 
-        self.encoderLSTM = nn.LSTM(config.lstmEncoderDim, config.lstmEncoderDim, config.lstmLayers,
-                                   config.lstmDropout, batch_first=True)
-
-        self.hindcastHead = CMAL(config.lstmEncoderDim, config.cmalHiddenDim, config.outputMixtures)
+        self.hindcastHead = CMAL(config.encoderHead)
 
         self.hiddenBridge = nn.Sequential(
-            nn.Linear(config.lstmEncoderDim, config.lstmDecoderDim),
+            nn.Linear(config.bridge),
             nn.Tanh()
         )
-        self.cellBridge = nn.Linear(config.lstmEncoderDim, config.lstmDecoderDim)
+        self.cellBridge = nn.Linear(config.bridge)
 
         self.decoderBasinProjection = DualProjection(config.decoderBasinProjection)
-
-        self.decoderBasinGAT = gnn.models.GAT(config.contextDecoderDim, config.contextDecoderDim,
-                                         config.contextDecoderLayers, config.contextDecoderDim,
-                                         config.contextDropout)
+        self.decoderBasinGAT = gnn.models.GAT(config.decoderGAT)
 
         self.decoderRiverProjection = DualProjection(config.decoderRiverProjection)
+        self.decoderLSTM = nn.LSTM(config.decoderLSTM, batch_first=True)
 
-        self.decoderLSTM = nn.LSTM(config.lstmDecoderDim, config.lstmDecoderDim, config.lstmLayers,
-                                   config.lstmDropout, batch_first=True)
-
-        self.forecastHead = CMAL(config.lstmDecoderDim, config.cmalHiddenDim, config.outputMixtures)
+        self.forecastHead = CMAL(config.decoderHead)
 
     def forward(self, inputs):
         # shape: [batchSize, basins, timesteps, features]
