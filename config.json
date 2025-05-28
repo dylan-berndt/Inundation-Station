@@ -1,37 +1,50 @@
 {
     "path": "data",
     "batchSize": 128,
+    "dataSplit": 0.8,
     "history": 365,
     "future": 7,
     "encoderBasinProjection": {
-        
+        "discreteDim": 4
     },
     "encoderRiverProjection": {
-        
+        "discreteDim": 4
     },
     "encoderGAT": {
-
+        "in_channels": 128,
+        "hidden_channels": 128,
+        "num_layers": 8
     },
     "encoderLSTM": {
-
+        "input_size": 128,
+        "hidden_size": 128,
+        "num_layers": 2
     },
     "encoderHead": {
-        
+        "inputDim": 128,
+        "hiddenDim": 256,
+        "mixtures": 12
     },
     "decoderBasinProjection": {
-        
+        "discreteDim": 4
     },
     "decoderRiverProjection": {
-        
+        "discreteDim": 4
     },
     "decoderGAT": {
-
+        "in_channels": 128,
+        "hidden_channels": 128,
+        "num_layers": 8
     },
     "decoderLSTM": {
-
+        "input_size": 128,
+        "hidden_size": 128,
+        "num_layers": 2
     },
     "decoderHead": {
-
+        "inputDim": 128,
+        "hiddenDim": 256,
+        "mixtures": 12
     },
     "includeFuture": false,
     "variables": {

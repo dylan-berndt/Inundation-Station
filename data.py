@@ -210,18 +210,6 @@ class InundationData(Dataset):
         self.basinDiscreteColumnRanges = []
         self.riverDiscreteColumnRanges = []
 
-        # This stinks
-        config.encoderBasinProjection.continuousDim = len(self.basinContinuous.columns)
-        config.decoderBasinProjection.continuousDim = len(self.basinContinuous.columns)
-        config.encoderRiverProjection.continuousDim = len(self.riverContinuous.columns)
-        config.decoderRiverProjection.continuousDim = len(self.riverContinuous.columns)
-
-        # Like bad
-        config.encoderBasinProjection.discreteRanges = self.basinDiscreteColumnRanges
-        config.decoderBasinProjection.discreteRanges = self.basinDiscreteColumnRanges
-        config.encoderRiverProjection.discreteRanges = self.riverDiscreteColumnRanges
-        config.decoderRiverProjection.discreteRanges = self.riverDiscreteColumnRanges
-
         for column in basinContinuousColumns:
             mean, std = self.basinContinuous[column].mean(), self.basinContinuous[column].std()
             self.basinContinuousScales[column] = mean, std
@@ -243,6 +231,19 @@ class InundationData(Dataset):
             valueMap = dict(zip(uniqueValues, range(len(uniqueValues))))
             self.riverDiscrete.loc[:, column] = self.riverDiscrete[column].apply(lambda x: valueMap[x])
             self.riverDiscreteColumnRanges.append(len(uniqueValues))
+
+        # This stinks
+        config.encoderBasinProjection.continuousDim = len(self.basinContinuous.columns)
+        config.decoderBasinProjection.continuousDim = len(self.basinContinuous.columns)
+        config.encoderRiverProjection.continuousDim = len(self.riverContinuous.columns)
+        config.decoderRiverProjection.continuousDim = len(self.riverContinuous.columns)
+
+        # Like bad
+        config.encoderBasinProjection.discreteRange = self.basinDiscreteColumnRanges
+        config.decoderBasinProjection.discreteRange = self.basinDiscreteColumnRanges
+        config.encoderRiverProjection.discreteRange = self.riverDiscreteColumnRanges
+        config.decoderRiverProjection.discreteRange = self.riverDiscreteColumnRanges
+
         print("Static Input Scaling Complete")
 
     def __len__(self):
