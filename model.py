@@ -46,22 +46,22 @@ class InundationStation(nn.Module):
 
     def forward(self, inputs):
         # shape: [batchSize, basins, timesteps, features]
-        basinContinuous = torch.concatenate([inputs["era5"], inputs["basinContinuous"]])
-        projected = self.encoderBasinProjection(basinContinuous, inputs["basinDiscrete"])
+        basinContinuous = torch.concatenate([inputs.era5, inputs.basinContinuous])
+        projected = self.encoderBasinProjection(basinContinuous, inputs.basinDiscrete)
         shape = projected.shape
         # shape: [batchSize * timesteps, basins, features]
         projected = projected.permute(0, 2, 1, 3)
         projected = torch.reshape(projected, [shape[0] * shape[2], shape[1], shape[3]])
         
-        attention = self.encoderBasinGAT(projected, inputs["structure"])
+        attention = self.encoderBasinGAT(projected, inputs.structure)
         # shape: [batchSize, basins, timesteps, features]
         attention = torch.reshape(attention, [shape[0], shape[2], shape[1], shape[3]])
         attention = attention.permute(0, 2, 1, 3)
         # shape: [batchSize, timesteps, features]
         sampledBasin = attention[:, 0, :, :]
 
-        riverContinuous = torch.concatenate([sampledBasin, inputs["riverContinuous"]], dim=-1)
-        series = self.encoderRiverProjection(riverContinuous, inputs["riverDiscrete"])
+        riverContinuous = torch.concatenate([sampledBasin, inputs.riverContinuous], dim=-1)
+        series = self.encoderRiverProjection(riverContinuous, inputs.riverDiscrete)
         series, (hidden, cell) = self.encoderLSTM(series)
 
         # shape: [batchSize, 1, mixtures]

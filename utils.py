@@ -34,6 +34,9 @@ class Config:
         else:
             self._values[key] = value
 
+    def __iter__(self):
+        return iter(self._values)
+
     def load(self, path):
         with open(path, "r") as file:
             data = json.load(file)

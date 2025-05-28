@@ -71,7 +71,7 @@ def csvToParquet(folder1, folder2):
         df = pd.read_csv(filePath)
 
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
-        df["date"] = df["date"].apply(lambda x: x.timestamp()).astype(int)
+        df["date"] = df["date"].apply(lambda x: x.timestamp() // 86400).astype(int)
         columns = df.columns.to_list()
         columns.remove("system:index")
         columns.remove(".geo")
@@ -79,6 +79,8 @@ def csvToParquet(folder1, folder2):
 
         fileName = os.path.basename(filePath).replace(".csv", ".parquet")
         outPath = os.path.join(folder2, fileName)
+
+        df = df.sort_values("date")
 
         df.to_parquet(outPath, index=False)
 
@@ -107,11 +109,11 @@ def classifyColumns(df, config, name):
         if df[column].dtype == float:
             config.variables[name][column] = True
             continue
-        useVariable = input("Use?  ") == "y"
+        useVariable = "y" in input("Use?  ")
         if not useVariable:
             seenPrefixes[prefix] = [False]
             continue
-        continuous = ("_cl" in prefix) or (prefix.lower() != prefix)
+        continuous = ("_cl" not in prefix) or (prefix.lower() != prefix)
         config.variables[name][column] = continuous
         seenPrefixes[prefix] = [True, continuous]
 
