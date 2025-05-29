@@ -17,6 +17,7 @@ from dataUtils import *
 from utils import *
 
 from datetime import datetime
+from itertools import chain
 
 
 def calculateReturnPeriods(df, periods=None):
@@ -74,48 +75,47 @@ class InundationData(Dataset):
         basinSHP = gpd.read_file(os.path.join(config.path, "joined", f"BasinATLAS_{location}_Joined.shp"))
 
         riverSHP = riverSHP.set_index("id")
-        basinSHP = basinSHP.set_index("PFAF_ID")
 
         for grdcID, row in riverSHP.iterrows():
             grdcDict[grdcID] = {"RiverATLAS": row}
 
         for pfafID, row in basinSHP.iterrows():
-            translateDict[row["id"]] = pfafID
+            translateDict[row["PFAF_ID"]] = pfafID
 
         print("GeoPandas Loaded")
 
-        allTargets = []
-
-        grdcPaths = glob(os.path.join(config.path, "series", "GRDC", "*.txt"))
-        for f, filePath in enumerate(grdcPaths):
-            fileName = os.path.basename(filePath)
-            riverID = fileName.split("_")[0]
-            df = pd.read_csv(filePath, encoding="latin1", comment="#", delimiter=";")
-
-            df['YYYY-MM-DD'] = pd.to_datetime(df['YYYY-MM-DD'], errors="coerce")
-            # Convert to days as integers, makes things cleaner later probably
-            df["YYYY-MM-DD"] = df["YYYY-MM-DD"].apply(lambda x: x.timestamp() // 86400).astype(int)
-
-            values = df[" Value"].to_numpy()
-            x, y = df["YYYY-MM-DD"].to_numpy(), values
-
-            if len(x) == 0:
-                del grdcDict[riverID]
-                continue
-
-            xMin, xMax = np.nanmin(x), np.nanmax(x)
-            linspace = np.linspace(xMin, xMax, int(xMax - xMin))
-            spline = CubicSpline(x, y, bc_type="natural")
-            values = spline(linspace)
-
-            grdcDict[riverID]["Time"] = df["YYYY-MM-DD"].to_numpy()
-            grdcDict[riverID]["Stage"] = values
-            grdcDict[riverID]["Thresholds"] = calculateReturnPeriods(df)
-            allTargets.extend(list(values))
-
-            print(f"\r{f + 1}/{len(grdcPaths)} GRDC files loaded", end="")
-
-        self.targetMean, self.targetDev = np.mean(allTargets), np.std(allTargets)
+        # allTargets = []
+        #
+        # grdcPaths = glob(os.path.join(config.path, "series", "GRDC", "*.txt"))
+        # for f, filePath in enumerate(grdcPaths):
+        #     fileName = os.path.basename(filePath)
+        #     riverID = fileName.split("_")[0]
+        #     df = pd.read_csv(filePath, encoding="latin1", comment="#", delimiter=";")
+        #
+        #     df['YYYY-MM-DD'] = pd.to_datetime(df['YYYY-MM-DD'], errors="coerce")
+        #     # Convert to days as integers, makes things cleaner later probably
+        #     df["YYYY-MM-DD"] = df["YYYY-MM-DD"].apply(lambda x: x.timestamp() // 86400).astype(int)
+        #
+        #     values = df[" Value"].to_numpy()
+        #     x, y = df["YYYY-MM-DD"].to_numpy(), values
+        #
+        #     if len(x) == 0:
+        #         del grdcDict[riverID]
+        #         continue
+        #
+        #     xMin, xMax = np.nanmin(x), np.nanmax(x)
+        #     linspace = np.linspace(xMin, xMax, int(xMax - xMin))
+        #     spline = CubicSpline(x, y, bc_type="natural")
+        #     values = spline(linspace)
+        #
+        #     grdcDict[riverID]["Time"] = df["YYYY-MM-DD"].to_numpy()
+        #     grdcDict[riverID]["Stage"] = values
+        #     grdcDict[riverID]["Thresholds"] = calculateReturnPeriods(df)
+        #     allTargets.extend(list(values))
+        #
+        #     print(f"\r{f + 1}/{len(grdcPaths)} GRDC files loaded", end="")
+        #
+        # self.targetMean, self.targetDev = np.mean(allTargets), np.std(allTargets)
 
         print()
 
@@ -141,7 +141,7 @@ class InundationData(Dataset):
         self.translateDict = translateDict
 
         graph = nx.DiGraph()
-        for i, row in self.basinATLAS.iterrows():
+        for i, row in chain(self.basinATLAS.iterrows(), basinSHP.iterrows()):
             upstream = row
             if pd.isna(upstream["NEXT_DOWN"]) or upstream["NEXT_DOWN"] == 0:
                 continue
@@ -152,15 +152,15 @@ class InundationData(Dataset):
 
             graph.add_edge(upstream["PFAF_ID"], upstream["PFAF_ID"])
 
-            print(f"\r{i}/{len(self.basinATLAS)} Basins Structure Appended to Graph", end="")
+            print(f"\r{i}/{len(self.basinATLAS)} Basin Structures Appended to Graph", end="")
 
         print()
 
-        print(graph.nodes)
-        print(len(set(self.pfafDict.keys()) | set(graph.nodes)), len(self.pfafDict.keys()))
+        print(type(next(iter(self.pfafDict))), type(next(iter(graph.nodes))))
+        print(len(set(self.pfafDict.keys()) & set(graph.nodes)), len(self.pfafDict.keys()))
 
         self.upstreamBasins = {
-            node: list(nx.ancestors(graph, node)) for node in self.pfafDict.keys() if node in graph
+            node: list(nx.ancestors(graph, node)) for node in self.pfafDict.keys() if node in graph.nodes
         }
         print(f"Upstream Basins Compiled | {len(self.upstreamBasins)}")
 
