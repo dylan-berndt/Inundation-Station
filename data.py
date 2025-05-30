@@ -89,7 +89,6 @@ class InundationData(Dataset):
         for grdcID, row in riverSHP.iterrows():
             grdcDict[grdcID] = {}
 
-        # TODO: Fix whatever the hell I was doing here
         for pfafID, row in basinSHP.iterrows():
             translateDict[row["id"]] = str(row["PFAF_ID"])
 
@@ -249,10 +248,10 @@ class InundationData(Dataset):
             self.riverDiscreteColumnRanges.append(len(uniqueValues))
 
         # This stinks
-        config.encoder.basinProjection.continuousDim = len(self.basinContinuous.columns)
-        config.decoder.basinProjection.continuousDim = len(self.basinContinuous.columns)
-        config.encoder.riverProjection.continuousDim = len(self.riverContinuous.columns)
-        config.decoder.riverProjection.continuousDim = len(self.riverContinuous.columns)
+        config.encoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
+        config.decoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
+        config.encoder.riverProjection.continuousDim = len(self.riverContinuous.columns) + len(self.era5Scales.keys())
+        config.decoder.riverProjection.continuousDim = len(self.riverContinuous.columns) + len(self.era5Scales.keys())
 
         # Like bad
         config.encoder.basinProjection.discreteRange = self.basinDiscreteColumnRanges

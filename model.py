@@ -29,7 +29,7 @@ class InundationCoder(nn.Module):
         basinContinuous = torch.concatenate([inputs.era5, inputs.basinContinuous], dim=-1)
         projected = self.basinProjection(basinContinuous, inputs.basinDiscrete)
 
-        # Process timestep by timestep 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉 
+        # Process timestep by timestep 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉
         steps = []
         for timestep in range(inputShape[1]):
             step = projected[:, timestep]
@@ -90,6 +90,88 @@ class InundationStation(nn.Module):
         forecast = series
 
         return hindcast, forecast
+    
+    @staticmethod
+    def minimalConfig(config, 
+                      discreteDim, 
+                      encoderGATDim, decoderGATDim, encoderGATLayers, decoderGATLayers, 
+                      encoderLSTMDim, decoderLSTMDim, lstmLayers, 
+                      headDim, mixtures, 
+                      dropout):
+        encoderProjection = {
+            "discreteDim": discreteDim,
+            "dropout": dropout,
+            "continuousDim": encoderGATDim
+        }
+
+        encoderGAT = {
+            "in_channels": encoderGATDim,
+            "hidden_channels": encoderGATDim,
+            "num_layers": encoderGATLayers
+        }
+
+        encoderLSTM = {
+            "input_size": encoderGATDim,
+            "hidden_size": encoderLSTMDim,
+            "num_layers": lstmLayers
+        }
+
+        encoderHead = {
+            "inputDim": encoderLSTMDim,
+            "hiddenDim": headDim,
+            "mixtures": mixtures
+        }
+
+        decoderProjection = {
+            "discreteDim": discreteDim,
+            "dropout": dropout,
+            "continuousDim": decoderGATDim
+        }
+
+        decoderGAT = {
+            "in_channels": decoderGATDim,
+            "hidden_channels": decoderGATDim,
+            "num_layers": decoderGATLayers
+        }
+
+        decoderLSTM = {
+            "input_size": decoderGATDim,
+            "hidden_size": decoderLSTMDim,
+            "num_layers": lstmLayers
+        }
+
+        decoderHead = {
+            "inputDim": decoderLSTMDim,
+            "hiddenDim": headDim,
+            "mixtures": mixtures
+        }
+
+        encoder = {
+            "basinProjection": encoderProjection,
+            "riverProjection": encoderProjection,
+            "gat": encoderGAT,
+            "lstm": encoderLSTM,
+            "head": encoderHead
+        }
+
+        bridge = {
+            "in_features": encoderLSTMDim,
+            "out_features": decoderLSTMDim
+        }
+
+        decoder = {
+            "basinProjection": decoderProjection,
+            "riverProjection": decoderProjection,
+            "gat": decoderGAT,
+            "lstm": decoderLSTM,
+            "head": decoderHead
+        }
+
+        config.encoder = encoder
+        config.bridge = bridge
+        config.decoder = decoder
+
+        return config
 
 
 
