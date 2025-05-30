@@ -5,10 +5,14 @@
     "history": 365,
     "future": 7,
     "encoderBasinProjection": {
-        "discreteDim": 4
+        "discreteDim": 4,
+        "dropout": 0.2,
+        "outputDim": 128
     },
     "encoderRiverProjection": {
-        "discreteDim": 4
+        "discreteDim": 4,
+        "dropout": 0.2,
+        "outputDim": 128
     },
     "encoderGAT": {
         "in_channels": 128,
@@ -25,11 +29,19 @@
         "hiddenDim": 256,
         "mixtures": 12
     },
+    "bridge": {
+        "in_features": 128,
+        "out_features": 128
+    },
     "decoderBasinProjection": {
-        "discreteDim": 4
+        "discreteDim": 4,
+        "dropout": 0.2,
+        "outputDim": 128
     },
     "decoderRiverProjection": {
-        "discreteDim": 4
+        "discreteDim": 4,
+        "dropout": 0.2,
+        "outputDim": 128
     },
     "decoderGAT": {
         "in_channels": 128,

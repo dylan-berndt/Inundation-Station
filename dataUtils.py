@@ -133,6 +133,8 @@ def era5Scales(path):
 
         iterations += len(df)
 
+        # I'm not actually sure this is perfectly correct
+        # for actual variance, but it doesn't really matter as long as it's close
         for column in df.columns:
             if column not in scales:
                 mean = df[column].mean()
@@ -147,9 +149,14 @@ def era5Scales(path):
 
             scales[column] = scales[column][0] + newMean / iterations, scales[column][1] + newM2
 
+        print(f"\r{f}/{len(files)} ERA5 Read for Standardization", end="")
+
+    print()
+
     for column in scales:
         scales[column] = scales[column][0], math.sqrt(scales[column][1] / iterations)
 
     with open("scales.json", "w") as file:
+        del scales["date"]
         json.dump(scales, file)
 

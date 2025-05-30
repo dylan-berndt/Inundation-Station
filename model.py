@@ -18,7 +18,7 @@ class InundationStation(nn.Module):
         self.encoderRiverProjection = DualProjection(config.encoderRiverProjection)
         self.encoderLSTM = nn.LSTM(**config.encoderLSTM, batch_first=True)
 
-        self.hindcastHead = CMAL(config.encoderHead)
+        self.hindcastHead = CMAL(**config.encoderHead)
 
         self.hiddenBridge = nn.Sequential(
             nn.Linear(**config.bridge),
@@ -32,11 +32,14 @@ class InundationStation(nn.Module):
         self.decoderRiverProjection = DualProjection(config.decoderRiverProjection)
         self.decoderLSTM = nn.LSTM(**config.decoderLSTM, batch_first=True)
 
-        self.forecastHead = CMAL(config.decoderHead)
+        self.forecastHead = CMAL(**config.decoderHead)
 
+    # TODO: Make less tedious and less duplicated
     def forward(self, inputs):
         # shape: [batchSize, basins, timesteps, features]
-        # TODO: Extend basin features along timesteps
+        dataShape = inputs.era5History.shape
+        inputs.basinContinuous = inputs.basinContinuous.unsqueeze(2).expand(1, 1, dataShape[2], 1)
+        inputs.basinDiscrete = inputs.basinDiscrete.unsqueeze(2).expand(1, 1, dataShape[2], 1)
         basinContinuous = torch.concatenate([inputs.era5History, inputs.basinContinuous])
         projected = self.encoderBasinProjection(basinContinuous, inputs.basinDiscrete)
         shape = projected.shape
@@ -51,6 +54,8 @@ class InundationStation(nn.Module):
         # shape: [batchSize, timesteps, features]
         sampledBasin = attention[:, 0, :, :]
 
+        inputs.riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(1, dataShape[2], 1)
+        inputs.riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(1, dataShape[2], 1)
         riverContinuous = torch.concatenate([sampledBasin, inputs.riverContinuous], dim=-1)
         series = self.encoderRiverProjection(riverContinuous, inputs.riverDiscrete)
         series, (hidden, cell) = self.encoderLSTM(series)
@@ -63,6 +68,9 @@ class InundationStation(nn.Module):
 
         hidden, cell = self.hiddenBridge(hidden), self.cellBridge(cell)
 
+        dataShape = inputs.era5Future.shape
+        inputs.basinContinuous = inputs.basinContinuous.unsqueeze(2).expand(1, 1, dataShape[2], 1)
+        inputs.basinDiscrete = inputs.basinDiscrete.unsqueeze(2).expand(1, 1, dataShape[2], 1)
         basinContinuous = torch.concatenate([inputs.era5Future, inputs.basinContinuous])
         projected = self.decoderBasinProjection(basinContinuous, inputs.basinDiscrete)
         shape = projected.shape
@@ -77,6 +85,8 @@ class InundationStation(nn.Module):
         # shape: [batchSize, timesteps, features]
         sampledBasin = attention[:, 0, :, :]
 
+        inputs.riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(1, dataShape[2], 1)
+        inputs.riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(1, dataShape[2], 1)
         riverContinuous = torch.concatenate([sampledBasin, inputs.riverContinuous], dim=-1)
         series = self.decoderRiverProjection(riverContinuous, inputs.riverDiscrete)
         series, _ = self.decoderLSTM(series, (hidden, cell))
