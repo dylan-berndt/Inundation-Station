@@ -159,4 +159,3 @@ def era5Scales(path):
     with open("scales.json", "w") as file:
         del scales["date"]
         json.dump(scales, file)
-

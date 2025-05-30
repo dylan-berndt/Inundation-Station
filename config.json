@@ -4,61 +4,64 @@
     "dataSplit": 0.8,
     "history": 365,
     "future": 7,
-    "encoderBasinProjection": {
-        "discreteDim": 4,
-        "dropout": 0.2,
-        "outputDim": 128
-    },
-    "encoderRiverProjection": {
-        "discreteDim": 4,
-        "dropout": 0.2,
-        "outputDim": 128
-    },
-    "encoderGAT": {
-        "in_channels": 128,
-        "hidden_channels": 128,
-        "num_layers": 8
-    },
-    "encoderLSTM": {
-        "input_size": 128,
-        "hidden_size": 128,
-        "num_layers": 2
-    },
-    "encoderHead": {
-        "inputDim": 128,
-        "hiddenDim": 256,
-        "mixtures": 12
+    "encoder": {
+        "basinProjection": {
+            "discreteDim": 4,
+            "dropout": 0.2,
+            "outputDim": 128
+        },
+        "riverProjection": {
+            "discreteDim": 4,
+            "dropout": 0.2,
+            "outputDim": 128
+        },
+        "gat": {
+            "in_channels": 128,
+            "hidden_channels": 128,
+            "num_layers": 8
+        },
+        "lstm": {
+            "input_size": 128,
+            "hidden_size": 128,
+            "num_layers": 2
+        },
+        "head": {
+            "inputDim": 128,
+            "hiddenDim": 256,
+            "mixtures": 12
+        }
     },
     "bridge": {
         "in_features": 128,
         "out_features": 128
     },
-    "decoderBasinProjection": {
-        "discreteDim": 4,
-        "dropout": 0.2,
-        "outputDim": 128
+    "decoder": {
+        "basinProjection": {
+            "discreteDim": 4,
+            "dropout": 0.2,
+            "outputDim": 128
+        },
+        "riverProjection": {
+            "discreteDim": 4,
+            "dropout": 0.2,
+            "outputDim": 128
+        },
+        "gat": {
+            "in_channels": 128,
+            "hidden_channels": 128,
+            "num_layers": 8
+        },
+        "lstm": {
+            "input_size": 128,
+            "hidden_size": 128,
+            "num_layers": 2
+        },
+        "head": {
+            "inputDim": 128,
+            "hiddenDim": 256,
+            "mixtures": 12
+        }
     },
-    "decoderRiverProjection": {
-        "discreteDim": 4,
-        "dropout": 0.2,
-        "outputDim": 128
-    },
-    "decoderGAT": {
-        "in_channels": 128,
-        "hidden_channels": 128,
-        "num_layers": 8
-    },
-    "decoderLSTM": {
-        "input_size": 128,
-        "hidden_size": 128,
-        "num_layers": 2
-    },
-    "decoderHead": {
-        "inputDim": 128,
-        "hiddenDim": 256,
-        "mixtures": 12
-    },
-    "includeFuture": false,
     "variables": {
         "river": {
             "LENGTH_KM": true,

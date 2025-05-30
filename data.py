@@ -23,6 +23,13 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 torch.set_default_device(device)
 
 
+class BasinData(Data):
+    def __cat_dim__(self, key, value, *args, **kwargs):
+        if key in ["riverContinuous", "riverDiscrete", "dischargeFuture", "dischargePast", "thresholds"]:
+            return None
+        return super().__cat_dim__(key, value, *args, **kwargs)
+
+
 def calculateReturnPeriods(df, periods=None):
     periods = [1, 2, 5, 10] if periods is None else periods
     df = df.copy()
@@ -242,16 +249,16 @@ class InundationData(Dataset):
             self.riverDiscreteColumnRanges.append(len(uniqueValues))
 
         # This stinks
-        config.encoderBasinProjection.continuousDim = len(self.basinContinuous.columns)
-        config.decoderBasinProjection.continuousDim = len(self.basinContinuous.columns)
-        config.encoderRiverProjection.continuousDim = len(self.riverContinuous.columns)
-        config.decoderRiverProjection.continuousDim = len(self.riverContinuous.columns)
+        config.encoder.basinProjection.continuousDim = len(self.basinContinuous.columns)
+        config.decoder.basinProjection.continuousDim = len(self.basinContinuous.columns)
+        config.encoder.riverProjection.continuousDim = len(self.riverContinuous.columns)
+        config.decoder.riverProjection.continuousDim = len(self.riverContinuous.columns)
 
         # Like bad
-        config.encoderBasinProjection.discreteRange = self.basinDiscreteColumnRanges
-        config.decoderBasinProjection.discreteRange = self.basinDiscreteColumnRanges
-        config.encoderRiverProjection.discreteRange = self.riverDiscreteColumnRanges
-        config.decoderRiverProjection.discreteRange = self.riverDiscreteColumnRanges
+        config.encoder.basinProjection.discreteRange = self.basinDiscreteColumnRanges
+        config.decoder.basinProjection.discreteRange = self.basinDiscreteColumnRanges
+        config.encoder.riverProjection.discreteRange = self.riverDiscreteColumnRanges
+        config.decoder.riverProjection.discreteRange = self.riverDiscreteColumnRanges
 
         print("Static Input Scaling Complete")
 
@@ -308,9 +315,20 @@ class InundationData(Dataset):
 
         structure = torch.transpose(torch.tensor(self.upstreamStructure[pfafID], dtype=torch.long), 0, 1).contiguous()
 
-        inputs = Data(
-            era5History=era5History,
-            era5Future=era5Future,
+        past = Data(
+            era5=era5History,
+            basinContinuous=basinContinuous,
+            basinDiscrete=basinDiscrete,
+            edge_index=structure,
+
+            riverContinuous=riverContinuous,
+            riverDiscrete=riverDiscrete,
+
+            num_nodes=len(upstreamBasins)
+        )
+
+        future = Data(
+            era5=era5Future,
             basinContinuous=basinContinuous,
             basinDiscrete=basinDiscrete,
             edge_index=structure,
@@ -327,24 +345,23 @@ class InundationData(Dataset):
             thresholds=torch.tensor(thresholds)
         )
 
-        return inputs, targets
+        return (past, future), targets
 
     def info(self, sample=None):
         sample = self[0] if sample is None else sample
+        (past, future), targets = sample
         data = f"""
         Total Samples: {len(self)}
-        Era5 History: {sample.era5History.shape} {sample.era5History.dtype}
-        Era5 Future: {sample.era5Future.shape} {sample.era5Future.dtype}
-        Basin Continuous: {sample.basinContinuous.shape} {sample.basinContinuous.dtype}
-        Basin Discrete: {sample.basinDiscrete.shape} {sample.basinDiscrete.dtype}
-        Structure: {sample.edge_index.shape} {sample.edge_index.dtype}
-        River Continuous: {sample.riverContinuous.shape} {sample.riverContinuous.dtype}
-        River Discrete: {sample.riverDiscrete.shape} {sample.riverDiscrete.dtype}
-        Discharge History: {sample.dischargeHistory.shape} {sample.dischargeHistory.dtype}
-        Discharge Future: {sample.dischargeFuture.shape} {sample.dischargeFuture.dtype}
-        Thresholds: {sample.thresholds.shape} {sample.thresholds.dtype}
-        GRDC ID: {self.indexMap[0]}
-        PFAF ID: {self.translateDict[self.indexMap[0]]}
+        Era5 History: {past.era5.shape} {past.era5.dtype}
+        Era5 Future: {future.era5.shape} {future.era5.dtype}
+        Basin Continuous: {past.basinContinuous.shape} {past.basinContinuous.dtype}
+        Basin Discrete: {past.basinDiscrete.shape} {past.basinDiscrete.dtype}
+        Structure: {past.edge_index.shape} {past.edge_index.dtype}
+        River Continuous: {past.riverContinuous.shape} {past.riverContinuous.dtype}
+        River Discrete: {past.riverDiscrete.shape} {past.riverDiscrete.dtype}
+        Discharge History: {targets.dischargeHistory.shape} {targets.dischargeHistory.dtype}
+        Discharge Future: {targets.dischargeFuture.shape} {targets.dischargeFuture.dtype}
+        Thresholds: {targets.thresholds.shape} {targets.thresholds.dtype}
         """
 
         print(data)

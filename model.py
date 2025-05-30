@@ -7,18 +7,64 @@ from modules import *
 from utils import *
 
 
+class InundationCoder(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.config = config
+
+        self.basinProjection = DualProjection(config.basinProjection)
+        self.basinGAT = gnn.models.GAT(**config.gat)
+
+        self.riverProjection = DualProjection(config.riverProjection)
+        self.lstm = nn.LSTM(**config.lstm, batch_first=True)
+
+        self.head = CMAL(**config.head)
+
+    def forward(self, inputs, state=None):
+        # shape: [totalNodes, timesteps, features]
+        inputShape = inputs.era5.shape
+        print(inputShape)
+        inputs.basinContinuous = inputs.basinContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
+        inputs.basinDiscrete = inputs.basinDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
+        basinContinuous = torch.concatenate([inputs.era5, inputs.basinContinuous], dim=-1)
+        projected = self.basinProjection(basinContinuous, inputs.basinDiscrete)
+
+        # Process timestep by timestep 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉 
+        steps = []
+        for timestep in range(inputShape[1]):
+            step = projected[:, timestep]
+            steps.append(self.basinGAT(step, inputs.edge_index))
+        
+        # shape: [totalNodes, timesteps, features]
+        attention = torch.stack(steps, dim=1)
+
+        # shape: [batchSize, timesteps, features]
+        # TODO: Check sampling
+        batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.num_nodes, dim=0)[:-1]], dim=0)
+        sampledBasin = attention[batchIndices, :, :]
+
+        inputs.riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
+        inputs.riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
+        riverContinuous = torch.concatenate([sampledBasin, inputs.riverContinuous], dim=-1)
+        series = self.riverProjection(riverContinuous, inputs.riverDiscrete)
+
+        if state is not None:
+            hidden, cell = state
+            series, (hidden, cell) = self.lstm(series, (hidden, cell))
+        else:
+            series, (hidden, cell) = self.lstm(series)
+
+        cast = self.head(series)
+
+        return cast, (hidden, cell)
+
+
 class InundationStation(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
         self.config = config
 
-        self.encoderBasinProjection = DualProjection(config.encoderBasinProjection)
-        self.encoderBasinGAT = gnn.models.GAT(**config.encoderGAT)
-
-        self.encoderRiverProjection = DualProjection(config.encoderRiverProjection)
-        self.encoderLSTM = nn.LSTM(**config.encoderLSTM, batch_first=True)
-
-        self.hindcastHead = CMAL(**config.encoderHead)
+        self.encoder = InundationCoder(config.encoder)
 
         self.hiddenBridge = nn.Sequential(
             nn.Linear(**config.bridge),
@@ -26,72 +72,22 @@ class InundationStation(nn.Module):
         )
         self.cellBridge = nn.Linear(**config.bridge)
 
-        self.decoderBasinProjection = DualProjection(config.decoderBasinProjection)
-        self.decoderBasinGAT = gnn.models.GAT(**config.decoderGAT)
+        self.decoder = InundationCoder(config.decoder)
 
-        self.decoderRiverProjection = DualProjection(config.decoderRiverProjection)
-        self.decoderLSTM = nn.LSTM(**config.decoderLSTM, batch_first=True)
-
-        self.forecastHead = CMAL(**config.decoderHead)
-
-    # TODO: Make less tedious and less duplicated
     def forward(self, inputs):
-        # shape: [batchSize, basins, timesteps, features]
-        dataShape = inputs.era5History.shape
-        inputs.basinContinuous = inputs.basinContinuous.unsqueeze(2).expand(1, 1, dataShape[2], 1)
-        inputs.basinDiscrete = inputs.basinDiscrete.unsqueeze(2).expand(1, 1, dataShape[2], 1)
-        basinContinuous = torch.concatenate([inputs.era5History, inputs.basinContinuous])
-        projected = self.encoderBasinProjection(basinContinuous, inputs.basinDiscrete)
-        shape = projected.shape
-        # shape: [batchSize * timesteps, basins, features]
-        projected = projected.permute(0, 2, 1, 3)
-        projected = torch.reshape(projected, [shape[0] * shape[2], shape[1], shape[3]])
-        
-        attention = self.encoderBasinGAT(projected, inputs.structure)
-        # shape: [batchSize, basins, timesteps, features]
-        attention = torch.reshape(attention, [shape[0], shape[2], shape[1], shape[3]])
-        attention = attention.permute(0, 2, 1, 3)
-        # shape: [batchSize, timesteps, features]
-        sampledBasin = attention[:, 0, :, :]
-
-        inputs.riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(1, dataShape[2], 1)
-        inputs.riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(1, dataShape[2], 1)
-        riverContinuous = torch.concatenate([sampledBasin, inputs.riverContinuous], dim=-1)
-        series = self.encoderRiverProjection(riverContinuous, inputs.riverDiscrete)
-        series, (hidden, cell) = self.encoderLSTM(series)
+        past, future = inputs
+        series, (hidden, cell) = self.encoder(past)
 
         # shape: [batchSize, 1, mixtures]
-        hindcast = self.hindcastHead(series[:, -1, :]).unsqueeze(1)
+        hindcast = series[:, -1, :].unsqueeze(1)
 
-        if not self.config.future:
-            return hindcast
+        if self.config.future == 0:
+            return hindcast, None
 
         hidden, cell = self.hiddenBridge(hidden), self.cellBridge(cell)
+        series, _ = self.decoder(future, (hidden, cell))
 
-        dataShape = inputs.era5Future.shape
-        inputs.basinContinuous = inputs.basinContinuous.unsqueeze(2).expand(1, 1, dataShape[2], 1)
-        inputs.basinDiscrete = inputs.basinDiscrete.unsqueeze(2).expand(1, 1, dataShape[2], 1)
-        basinContinuous = torch.concatenate([inputs.era5Future, inputs.basinContinuous])
-        projected = self.decoderBasinProjection(basinContinuous, inputs.basinDiscrete)
-        shape = projected.shape
-        # shape: [batchSize * timesteps, basins, features]
-        projected = projected.permute(0, 2, 1, 3)
-        projected = torch.reshape(projected, [shape[0] * shape[2], shape[1], shape[3]])
-        
-        attention = self.decoderBasinGAT(projected, inputs.structure)
-        # shape: [batchSize, basins, timesteps, features]
-        attention = torch.reshape(attention, [shape[0], shape[2], shape[1], shape[3]])
-        attention = attention.permute(0, 2, 1, 3)
-        # shape: [batchSize, timesteps, features]
-        sampledBasin = attention[:, 0, :, :]
-
-        inputs.riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(1, dataShape[2], 1)
-        inputs.riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(1, dataShape[2], 1)
-        riverContinuous = torch.concatenate([sampledBasin, inputs.riverContinuous], dim=-1)
-        series = self.decoderRiverProjection(riverContinuous, inputs.riverDiscrete)
-        series, _ = self.decoderLSTM(series, (hidden, cell))
-
-        forecast = self.forecastHead(series)
+        forecast = series
 
         return hindcast, forecast
 
