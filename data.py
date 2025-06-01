@@ -25,7 +25,7 @@ torch.set_default_device(device)
 
 class BasinData(Data):
     def __cat_dim__(self, key, value, *args, **kwargs):
-        if key in ["riverContinuous", "riverDiscrete", "dischargeFuture", "dischargePast", "thresholds"]:
+        if key in ["riverContinuous", "riverDiscrete", "dischargeFuture", "dischargeHistory", "thresholds"]:
             return None
         return super().__cat_dim__(key, value, *args, **kwargs)
 
@@ -62,7 +62,7 @@ def defaultNoise(minNoise, maxNoise):
 
 
 class InundationData(Dataset):
-    def __init__(self, config, location="NA", noise=defaultNoise(0.3, 0.7)):
+    def __init__(self, config, location="NA", noise=defaultNoise(0.5, 0.7)):
         self.config = config
 
         self.forecastNoise = noise
@@ -72,6 +72,7 @@ class InundationData(Dataset):
 
         # Maps from GRDC ID to Pfafstetter ID
         translateDict = {}
+        inverseDict = {}
 
         basinContinuousColumns = [column for column in config.variables.basin if config.variables.basin[column]]
         basinDiscreteColumns = [column for column in config.variables.basin if not config.variables.basin[column]]
@@ -91,6 +92,7 @@ class InundationData(Dataset):
 
         for pfafID, row in basinSHP.iterrows():
             translateDict[row["id"]] = str(row["PFAF_ID"])
+            inverseDict[str(row["PFAF_ID"])] = row["id"]
 
         print("GeoPandas Loaded")
 
@@ -106,6 +108,11 @@ class InundationData(Dataset):
             # Convert to days as integers, makes things cleaner later probably
             df["YYYY-MM-DD"] = df["YYYY-MM-DD"].apply(lambda x: x.timestamp() // 86400).astype(int)
 
+            # Constrain to ERA5 data range
+            before = df["YYYY-MM-DD"] <= (datetime(2023, 1, 1).timestamp() // 86400)
+            after = df["YYYY-MM-DD"] >= (datetime(1980, 1, 1).timestamp() // 86400)
+            df = df[before & after]
+
             values = df[" Value"].to_numpy()
             x, y = df["YYYY-MM-DD"].to_numpy(), values
 
@@ -119,7 +126,7 @@ class InundationData(Dataset):
             values = spline(linspace)
 
             grdcDict[riverID]["Time"] = df["YYYY-MM-DD"].to_numpy()
-            grdcDict[riverID]["Stage"] = values
+            grdcDict[riverID]["Stage"] = torch.tensor(values, dtype=torch.float32)
             grdcDict[riverID]["Thresholds"] = calculateReturnPeriods(df)
             allTargets.extend(list(values))
 
@@ -129,6 +136,7 @@ class InundationData(Dataset):
 
         print()
 
+        sumLakes = 0
         era5Paths = glob(os.path.join(config.path, "series", "ERA5_Parquet", "*.parquet"))
         for f, filePath in enumerate(era5Paths):
             fileName = os.path.basename(filePath)
@@ -137,12 +145,21 @@ class InundationData(Dataset):
                 pfafDict[pfafID] = {}
             pfafDict[pfafID]["Parquet_Path"] = filePath
 
-            print(f"\r{f + 1}/{len(era5Paths)} ERA5 files queued", end="")
+            basinData = pd.read_parquet(filePath).to_numpy()
+            if basinData.shape[1] == 1:
+                start = datetime(1980, 1, 1).timestamp() // 86400
+                end = datetime(2023, 1, 1).timestamp() // 86400
+                basinData = np.zeros([int(end - start), 8])
+                basinData[0, :] = start
+                sumLakes += 1
+            pfafDict[pfafID]["Data"] = torch.tensor(basinData, dtype=torch.float32)
+
+            print(f"\r{f + 1}/{len(era5Paths)} ERA5 files loaded", end="")
+
+        print(f"\nTotal empty basins: {sumLakes}")
 
         with open("scales.json", "r") as file:
             self.era5Scales = json.load(file)
-
-        print()
 
         self.basinATLAS = gpd.read_file(os.path.join(config.path, "BasinATLAS_v10_shp", "BasinATLAS_v10_lev07.shp"))
 
@@ -169,6 +186,23 @@ class InundationData(Dataset):
         self.upstreamBasins = {
             node: [node] + list(nx.ancestors(graph, node)) for node in self.pfafDict.keys()
         }
+
+        # Stupid fucking Russian basins somehow upstream of North American streams?
+        for node in list(self.grdcDict.keys()):
+            pfafID = translateDict[node]
+            if pfafID not in self.upstreamBasins:
+                del self.grdcDict[node]
+                continue
+
+            failed = False
+            for upstreamNode in self.upstreamBasins[pfafID]:
+                if upstreamNode not in pfafDict:
+                    failed = True
+
+            if failed:
+                del self.upstreamBasins[pfafID]
+                del self.grdcDict[node]
+
         upstreams = [len(self.upstreamBasins[node]) for node in self.upstreamBasins]
         print(f"Upstream Basins Compiled | {np.median(upstreams)} | {np.mean(upstreams)}")
 
@@ -182,18 +216,14 @@ class InundationData(Dataset):
             currentUpstreamNodes = self.upstreamBasins[node]
             nodeMap = dict(zip(currentUpstreamNodes, range(len(currentUpstreamNodes))))
             newEdges = [[nodeMap[edge[0]], nodeMap[edge[1]]] for edge in currentEdges]
-            # # Self connections
-            # for i in range(len(currentUpstreamNodes)):
-            #     nodeNum = nodeMap[currentUpstreamNodes[i]]
-            #     newEdges.append([nodeNum, nodeNum])
             self.upstreamStructure[node] = newEdges
         print("Structure Tensors Complete")
 
         self.lengths = []
         self.indexMap = []
         self.offsetMap = []
-        for key in grdcDict:
-            timeSeries = grdcDict[key]["Time"]
+        for key in self.grdcDict:
+            timeSeries = self.grdcDict[key]["Time"]
 
             seriesLength = timeSeries[-1] - timeSeries[0]
             seriesLength -= config.history + config.future
@@ -207,6 +237,7 @@ class InundationData(Dataset):
 
         self.basinATLAS = self.basinATLAS.set_index("PFAF_ID")
 
+        # Truly life-threateningly disgusting code down here. Fuck pandas
         self.basinContinuous = self.basinATLAS[basinContinuousColumns]
         self.basinContinuous = self.basinContinuous.astype(float)
 
@@ -247,11 +278,16 @@ class InundationData(Dataset):
             self.riverDiscrete.loc[:, column] = self.riverDiscrete[column].apply(lambda x: valueMap[x])
             self.riverDiscreteColumnRanges.append(len(uniqueValues))
 
+        self.basinContinuous = self.basinContinuous.dropna(axis=1)
+        self.basinDiscrete = self.basinDiscrete.dropna(axis=1)
+        self.riverContinuous = self.riverContinuous.dropna(axis=1)
+        self.riverDiscrete = self.riverDiscrete.dropna(axis=1)
+
         # This stinks
         config.encoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
         config.decoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
-        config.encoder.riverProjection.continuousDim = len(self.riverContinuous.columns) + len(self.era5Scales.keys())
-        config.decoder.riverProjection.continuousDim = len(self.riverContinuous.columns) + len(self.era5Scales.keys())
+        config.encoder.riverProjection.continuousDim = len(self.riverContinuous.columns) + config.encoder.gat.hidden_channels
+        config.decoder.riverProjection.continuousDim = len(self.riverContinuous.columns) + config.decoder.gat.hidden_channels
 
         # Like bad
         config.encoder.basinProjection.discreteRange = self.basinDiscreteColumnRanges
@@ -286,14 +322,31 @@ class InundationData(Dataset):
         thresholds = [(threshold - self.targetMean) / self.targetDev for threshold in thresholds]
 
         basinERA5Data = []
-        for basin in upstreamBasins:
-            era5Path = self.pfafDict[basin]["Parquet_Path"]
-            query = f"SELECT * FROM '{era5Path}' WHERE date >= {riverTime[0]} AND date <= {riverTime[-1]}"
-            df = duckdb.query(query).to_df()
-            df = df.drop("date", axis=1)
-            for column in df.columns:
-                df[column] = (df[column] - self.era5Scales[column][0]) / self.era5Scales[column][1]
-            basinERA5Data.append(torch.tensor(df.to_numpy(), dtype=torch.float32))
+        for b, basin in enumerate(upstreamBasins):
+            # era5Path = self.pfafDict[basin]["Parquet_Path"]
+            # query = f"SELECT * FROM '{era5Path}' WHERE date >= {riverTime[0]} AND date <= {riverTime[-1]}"
+            # df = duckdb.query(query).to_df()
+            # df = df.drop("date", axis=1)
+            # for column in df.columns:
+            #     df[column] = (df[column] - self.era5Scales[column][0]) / self.era5Scales[column][1]
+            #
+            # data = df.to_numpy()
+            # # TODO: Do better than this for stupid idiot tiny lake area basins
+            # # Probably lake basins. Those were all that showed up. Could just be tiny basins (God no)
+            # if data.shape[1] == 0:
+            #     data = np.zeros([riverTime[-1] - riverTime[0] + 1, 7])
+
+            data = self.pfafDict[basin]["Data"]
+            first = int(data[0, 0].item())
+            index = riverTime[0] - first
+            length = riverTime[-1] - riverTime[0]
+            data = data[index: index + length, 1:]
+
+            # Hope that these are in order
+            for k, key in enumerate(self.era5Scales.keys()):
+                data[:, k] = (data[:, k] - self.era5Scales[key][0]) / self.era5Scales[key][1]
+
+            basinERA5Data.append(data)
 
         era5Data = torch.stack(basinERA5Data, dim=0)
         era5History = era5Data[:, :self.config.history]
@@ -314,7 +367,7 @@ class InundationData(Dataset):
 
         structure = torch.transpose(torch.tensor(self.upstreamStructure[pfafID], dtype=torch.long), 0, 1).contiguous()
 
-        past = Data(
+        past = BasinData(
             era5=era5History,
             basinContinuous=basinContinuous,
             basinDiscrete=basinDiscrete,
@@ -323,10 +376,11 @@ class InundationData(Dataset):
             riverContinuous=riverContinuous,
             riverDiscrete=riverDiscrete,
 
-            num_nodes=len(upstreamBasins)
+            num_nodes=len(upstreamBasins),
+            nodes=len(upstreamBasins)
         )
 
-        future = Data(
+        future = BasinData(
             era5=era5Future,
             basinContinuous=basinContinuous,
             basinDiscrete=basinDiscrete,
@@ -335,13 +389,14 @@ class InundationData(Dataset):
             riverContinuous=riverContinuous,
             riverDiscrete=riverDiscrete,
 
-            num_nodes=len(upstreamBasins)
+            num_nodes=len(upstreamBasins),
+            nodes=len(upstreamBasins)
         )
 
-        targets = Data(
-            dischargeHistory=torch.from_numpy(dischargeHistory),
-            dischargeFuture=torch.from_numpy(dischargeFuture),
-            thresholds=torch.tensor(thresholds)
+        targets = BasinData(
+            dischargeHistory=dischargeHistory,
+            dischargeFuture=dischargeFuture,
+            thresholds=torch.tensor(thresholds, dtype=torch.float32)
         )
 
         return (past, future), targets

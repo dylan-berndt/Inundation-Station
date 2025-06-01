@@ -75,9 +75,7 @@ class CMALLoss(nn.Module):
     def forward(self, yPred, yTrue):
         m, b, t, p = yPred
 
-        # print(m.shape, b.shape, t.shape, p.shape, yTrue.shape)
-
-        error = yTrue - m
+        error = yTrue.unsqueeze(-1) - m
         logLike = torch.log(t) + torch.log(1.0 - t) - torch.log(b) - torch.max(t * error, (t - 1.0) * error) / b
         logWeights = torch.log(p + 1e-8)
 

@@ -23,7 +23,6 @@ class InundationCoder(nn.Module):
     def forward(self, inputs, state=None):
         # shape: [totalNodes, timesteps, features]
         inputShape = inputs.era5.shape
-        print(inputShape)
         inputs.basinContinuous = inputs.basinContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
         inputs.basinDiscrete = inputs.basinDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
         basinContinuous = torch.concatenate([inputs.era5, inputs.basinContinuous], dim=-1)
@@ -39,8 +38,7 @@ class InundationCoder(nn.Module):
         attention = torch.stack(steps, dim=1)
 
         # shape: [batchSize, timesteps, features]
-        # TODO: Check sampling
-        batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.num_nodes, dim=0)[:-1]], dim=0)
+        batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)
         sampledBasin = attention[batchIndices, :, :]
 
         inputs.riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
@@ -79,7 +77,7 @@ class InundationStation(nn.Module):
         series, (hidden, cell) = self.encoder(past)
 
         # shape: [batchSize, 1, mixtures]
-        hindcast = series[:, -1, :].unsqueeze(1)
+        hindcast = [s[:, -1, :].unsqueeze(1) for s in series]
 
         if self.config.future == 0:
             return hindcast, None
