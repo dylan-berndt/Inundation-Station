@@ -2,7 +2,7 @@
     "path": "data",
     "batchSize": 8,
     "dataSplit": 0.8,
-    "history": 365,
+    "history": 120,
     "future": 7,
     "encoder": {
         "basinProjection": {

@@ -88,40 +88,63 @@ class CMALNormalizedMeanAbsolute(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, yPred, yTrue, deviations):
+    def forward(self, yPred, yTrue, deviations, *args, **kwargs):
+        yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
         return torch.mean(torch.abs(yPred - yTrue) / deviations)
 
 
+# TODO: Refactor for actual distributions with CDF
 class CMALPrecision(nn.Module):
-    def __init__(self):
+    def __init__(self, direction="above"):
+        self.direction = direction
         super().__init__()
 
-    def forward(self, yPred, yTrue, thresholds):
-        yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
+    def forward(self, yPred, yTrue, thresholds, *args, **kwargs):
+        precision = []
+        for i in range(thresholds.shape[-1]):
+            threshold = thresholds[:, i]
+            yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
 
-        tp = (yPred >= thresholds).float() * (yTrue >= thresholds).float()
-        fp = (yPred >= thresholds).float() * (yTrue < thresholds).float()
+            tp = (yPred >= threshold).float() * (yTrue >= threshold).float()
+            fp = (yPred >= threshold).float() * (yTrue < threshold).float()
 
-        tp = torch.sum(tp)
-        fp = torch.sum(fp)
+            if self.direction == "below":
+                tp = 1 - tp
+                fn = 1 - fn
 
-        return tp / (tp + fp + 1e-8)
+            tp = torch.sum(tp)
+            fp = torch.sum(fp)
+
+            precision.append((tp / (tp + fp + 1e-8)).item())
+
+        return precision
 
 
+# TODO: Refactor for actual distributions with CDF
 class CMALRecall(nn.Module):
-    def __init__(self):
+    def __init__(self, direction="above"):
+        self.direction = direction
         super().__init__()
 
-    def forward(self, yPred, yTrue, thresholds):
-        yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
+    def forward(self, yPred, yTrue, thresholds, *args, **kwargs):
+        recall = []
+        for i in range(thresholds.shape[-1]):
+            threshold = thresholds[:, i]
+            yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
 
-        tp = (yPred >= thresholds).float() * (yTrue >= thresholds).float()
-        fn = (yPred < thresholds).float() * (yTrue >= thresholds).float()
+            tp = (yPred >= threshold).float() * (yTrue >= threshold).float()
+            fn = (yPred < threshold).float() * (yTrue >= threshold).float()
 
-        tp = torch.sum(tp)
-        fn = torch.sum(fn)
+            if self.direction == "below":
+                tp = 1 - tp
+                fn = 1 - fn
 
-        return tp / (tp + fn + 1e-8)
+            tp = torch.sum(tp)
+            fn = torch.sum(fn)
+
+            recall.append((tp / (tp + fn + 1e-8)).item())
+
+        return recall
 
 
 def sampleCMAL(yPred, numSamples):

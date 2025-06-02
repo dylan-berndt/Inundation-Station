@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Sampler
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Data, Batch
 
@@ -18,6 +18,7 @@ from utils import *
 
 from datetime import datetime
 from itertools import chain
+import random
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 torch.set_default_device(device)
@@ -30,7 +31,7 @@ class BasinData(Data):
         return super().__cat_dim__(key, value, *args, **kwargs)
 
 
-def calculateReturnPeriods(df, periods=None):
+def calculateReturnPeriods(df, periods=None, maximums=True):
     periods = [1, 2, 5, 10] if periods is None else periods
     df = df.copy()
     # Results in negative year values but still works ig
@@ -38,8 +39,8 @@ def calculateReturnPeriods(df, periods=None):
     secondsInYear = 60 * 60 * 25 * 365
     df['year'] = df['YYYY-MM-DD'].apply(lambda x: (x - start) // secondsInYear).astype(int)
 
-    annualMax = df.groupby('year')[' Value'].max().dropna()
-    logMax = np.log10(annualMax)
+    annuals = df.groupby('year')[' Value'].max().dropna() if maximums else df.groupby('year')[' Value'].min().dropna()
+    logMax = np.log10(annuals)
 
     skew, mean, std = logMax.skew(), logMax.mean(), logMax.std()
 
@@ -121,9 +122,11 @@ class InundationData(Dataset):
                 continue
 
             xMin, xMax = np.nanmin(x), np.nanmax(x)
+            yMin, yMax = np.nanmin(y), np.nanmax(y)
             linspace = np.linspace(xMin, xMax, int(xMax - xMin))
             spline = CubicSpline(x, y, bc_type="natural")
             values = spline(linspace)
+            values = np.clip(values, yMin, yMax)
 
             grdcDict[riverID]["Time"] = df["YYYY-MM-DD"].to_numpy()
             grdcDict[riverID]["Stage"] = torch.tensor(values, dtype=torch.float32)
@@ -224,6 +227,7 @@ class InundationData(Dataset):
         self.lengths = []
         self.indexMap = []
         self.offsetMap = []
+        self.graphSizes = []
         for key in self.grdcDict:
             timeSeries = self.grdcDict[key]["Time"]
 
@@ -232,6 +236,7 @@ class InundationData(Dataset):
             self.lengths.append(seriesLength)
             self.indexMap.extend([key] * seriesLength)
             self.offsetMap.extend(range(seriesLength))
+            self.graphSizes.extend([len(self.upstreamBasins[translateDict[key]])] * seriesLength)
 
             if timeSeries[1] - timeSeries[0] != 1:
                 print(timeSeries[0], timeSeries[1])
@@ -323,6 +328,8 @@ class InundationData(Dataset):
         thresholds = self.grdcDict[grdcID]["Thresholds"]
         thresholds = [(threshold - self.targetMean) / self.targetDev for threshold in thresholds]
 
+        deviation = self.grdcDict[grdcID]["Deviation"]
+
         basinERA5Data = []
         for b, basin in enumerate(upstreamBasins):
             data = self.pfafDict[basin]["Data"]
@@ -385,7 +392,8 @@ class InundationData(Dataset):
         targets = BasinData(
             dischargeHistory=dischargeHistory,
             dischargeFuture=dischargeFuture,
-            thresholds=torch.tensor(thresholds, dtype=torch.float32)
+            thresholds=torch.tensor(thresholds, dtype=torch.float32),
+            deviation=torch.tensor(deviation, dtype=torch.float32)
         )
 
         return (past, future), targets
@@ -408,6 +416,49 @@ class InundationData(Dataset):
         """
 
         print(data)
+
+
+class GraphSizeSampler(Sampler):
+    def __init__(self, dataset, nodesPerBatch=500, dropLast=False):
+        self.dataset = dataset
+        self.nodesPerBatch = 500
+        self.dropLast = dropLast
+
+        self.batches = []
+        indices = range(len(dataset))
+        sizes = dataset.graphSizes
+
+        combined = list(zip(indices, sizes))
+        random.shuffle(combined)
+        indices, sizes = zip(*combined)
+
+        batch = []
+        batchSum = 0
+        for i in range(len(indices)):
+            if batchSum + sizes[i] > nodesPerBatch and len(batch) != 0:
+                self.batches.append(batch)
+                batch = []
+                batchSum = 0
+
+            batch.append(indices[i])
+            batchSum += sizes[i]
+
+        plt.subplot(1, 2, 1)
+        plt.title("Node Count Distribution per Sample")
+        plt.hist(sizes)
+
+        plt.subplot(1, 2, 2)
+        plt.title("Node Count Distribution per Batch")
+        plt.hist([len(batch) for batch in self.batches])
+        plt.show()
+
+    def __iter__(self):
+        random.shuffle(self.batches)
+        for batch in self.batches:
+            yield batch
+
+    def __len__(self):
+        return len(self.batches)
 
 
 class FloodHubData(InundationData):
