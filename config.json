@@ -1,6 +1,6 @@
 {
     "path": "data",
-    "batchSize": 16,
+    "batchSize": 8,
     "dataSplit": 0.8,
     "history": 365,
     "future": 7,

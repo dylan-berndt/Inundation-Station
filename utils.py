@@ -97,11 +97,13 @@ class CMALPrecision(nn.Module):
         super().__init__()
 
     def forward(self, yPred, yTrue, thresholds):
+        yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
+
         tp = (yPred >= thresholds).float() * (yTrue >= thresholds).float()
         fp = (yPred >= thresholds).float() * (yTrue < thresholds).float()
 
-        tp = torch.mean(tp)
-        fp = torch.mean(fp)
+        tp = torch.sum(tp)
+        fp = torch.sum(fp)
 
         return tp / (tp + fp + 1e-8)
 
@@ -111,11 +113,13 @@ class CMALRecall(nn.Module):
         super().__init__()
 
     def forward(self, yPred, yTrue, thresholds):
+        yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
+
         tp = (yPred >= thresholds).float() * (yTrue >= thresholds).float()
         fn = (yPred < thresholds).float() * (yTrue >= thresholds).float()
 
-        tp = torch.mean(tp)
-        fn = torch.mean(fn)
+        tp = torch.sum(tp)
+        fn = torch.sum(fn)
 
         return tp / (tp + fn + 1e-8)
 

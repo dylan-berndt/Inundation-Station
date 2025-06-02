@@ -128,6 +128,7 @@ class InundationData(Dataset):
             grdcDict[riverID]["Time"] = df["YYYY-MM-DD"].to_numpy()
             grdcDict[riverID]["Stage"] = torch.tensor(values, dtype=torch.float32)
             grdcDict[riverID]["Thresholds"] = calculateReturnPeriods(df)
+            grdcDict[riverID]["Deviation"] = np.std(values)
             allTargets.extend(list(values))
 
             print(f"\r{f + 1}/{len(grdcPaths)} GRDC files loaded", end="")
@@ -152,7 +153,7 @@ class InundationData(Dataset):
                 basinData = np.zeros([int(end - start), 8])
                 basinData[0, :] = start
                 sumLakes += 1
-            pfafDict[pfafID]["Data"] = torch.tensor(basinData, dtype=torch.float32)
+            pfafDict[pfafID]["Data"] = torch.nan_to_num(torch.tensor(basinData, dtype=torch.float32))
 
             print(f"\r{f + 1}/{len(era5Paths)} ERA5 files loaded", end="")
 
@@ -188,6 +189,7 @@ class InundationData(Dataset):
         }
 
         # Stupid fucking Russian basins somehow upstream of North American streams?
+        # And Panama is annoying?
         for node in list(self.grdcDict.keys()):
             pfafID = translateDict[node]
             if pfafID not in self.upstreamBasins:
@@ -323,19 +325,6 @@ class InundationData(Dataset):
 
         basinERA5Data = []
         for b, basin in enumerate(upstreamBasins):
-            # era5Path = self.pfafDict[basin]["Parquet_Path"]
-            # query = f"SELECT * FROM '{era5Path}' WHERE date >= {riverTime[0]} AND date <= {riverTime[-1]}"
-            # df = duckdb.query(query).to_df()
-            # df = df.drop("date", axis=1)
-            # for column in df.columns:
-            #     df[column] = (df[column] - self.era5Scales[column][0]) / self.era5Scales[column][1]
-            #
-            # data = df.to_numpy()
-            # # TODO: Do better than this for stupid idiot tiny lake area basins
-            # # Probably lake basins. Those were all that showed up. Could just be tiny basins (God no)
-            # if data.shape[1] == 0:
-            #     data = np.zeros([riverTime[-1] - riverTime[0] + 1, 7])
-
             data = self.pfafDict[basin]["Data"]
             first = int(data[0, 0].item())
             index = riverTime[0] - first
