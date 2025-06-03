@@ -62,6 +62,7 @@ def defaultNoise(minNoise, maxNoise):
     return noiseData
 
 
+# TODO: Find the goddamned nans
 class InundationData(Dataset):
     def __init__(self, config, location="NA", noise=defaultNoise(0.5, 0.7)):
         self.config = config
@@ -342,6 +343,8 @@ class InundationData(Dataset):
             for k, key in enumerate(self.era5Scales.keys()):
                 data[:, k] = (data[:, k] - self.era5Scales[key][0]) / self.era5Scales[key][1]
 
+            data = torch.nan_to_num(data)
+
             basinERA5Data.append(data)
 
         era5Data = torch.stack(basinERA5Data, dim=0)
@@ -440,10 +443,12 @@ class GraphSizeSampler(Sampler):
         indices, sizes = zip(*combined)
 
         batch = []
+        batchSizes = []
         batchSum = 0
         for i in range(len(indices)):
             if batchSum + sizes[i] > nodesPerBatch and len(batch) != 0:
                 self.batches.append(batch)
+                batchSizes.append(batchSum)
                 batch = []
                 batchSum = 0
 
@@ -456,7 +461,7 @@ class GraphSizeSampler(Sampler):
 
         plt.subplot(1, 2, 2)
         plt.title("Node Count Distribution per Batch")
-        plt.hist([sum([sizes[index] for index in batch]) for batch in self.batches])
+        plt.hist(batchSizes)
         plt.show()
 
     def __iter__(self):
