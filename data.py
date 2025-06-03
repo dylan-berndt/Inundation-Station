@@ -425,8 +425,15 @@ class GraphSizeSampler(Sampler):
         self.dropLast = dropLast
 
         self.batches = []
-        indices = range(len(dataset))
-        sizes = dataset.graphSizes
+
+        if hasattr(dataset, "graphSizes"):
+            indices = range(len(dataset))
+            sizes = dataset.graphSizes
+        else:
+            under = dataset.dataset
+            subsetIndices = dataset.indices
+            indices = range(len(subsetIndices))
+            sizes = [under.graphSizes[subsetIndices[i]] for i in indices]
 
         combined = list(zip(indices, sizes))
         random.shuffle(combined)
@@ -449,7 +456,7 @@ class GraphSizeSampler(Sampler):
 
         plt.subplot(1, 2, 2)
         plt.title("Node Count Distribution per Batch")
-        plt.hist([len(batch) for batch in self.batches])
+        plt.hist([sum([sizes[index] for index in batch]) for batch in self.batches])
         plt.show()
 
     def __iter__(self):
