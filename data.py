@@ -353,6 +353,7 @@ class InundationData(Dataset):
 
         era5Future = self.forecastNoise(era5Future)
 
+        # TODO: Convert from pandas to torch for faster processing
         basinContinuous = [torch.tensor(self.basinContinuous.loc[int(basinID)].to_numpy(), dtype=torch.float32)
                            for basinID in upstreamBasins]
         basinDiscrete = [torch.tensor(self.basinDiscrete.loc[int(basinID)].to_numpy(dtype=np.int64), dtype=torch.long)
@@ -396,7 +397,7 @@ class InundationData(Dataset):
             dischargeHistory=dischargeHistory,
             dischargeFuture=dischargeFuture,
             thresholds=torch.tensor(thresholds, dtype=torch.float32),
-            deviation=torch.tensor(deviation, dtype=torch.float32)
+            deviation=torch.tensor(deviation / self.targetDev, dtype=torch.float32)
         )
 
         return (past, future), targets
@@ -416,6 +417,7 @@ class InundationData(Dataset):
         Discharge History: {targets.dischargeHistory.shape} {targets.dischargeHistory.dtype}
         Discharge Future: {targets.dischargeFuture.shape} {targets.dischargeFuture.dtype}
         Thresholds: {targets.thresholds.shape} {targets.thresholds.dtype}
+        Deviation: {targets.deviation.shape} {targets.deviation.dtype}
         """
 
         print(data)
