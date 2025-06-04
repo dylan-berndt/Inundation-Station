@@ -85,6 +85,8 @@ class InundationStation(nn.Module):
         hidden, cell = self.hiddenBridge(hidden), self.cellBridge(cell)
         series, _ = self.decoder(future, (hidden, cell))
 
+        del _
+
         forecast = series
 
         return hindcast, forecast

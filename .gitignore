@@ -2,3 +2,5 @@
 /train/**/*.csv
 
 /data/**/*
+
+checkpoint.pt
