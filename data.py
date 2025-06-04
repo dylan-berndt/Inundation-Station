@@ -461,14 +461,21 @@ class GraphSizeSampler(Sampler):
         if force:
             self.batches = [self.batches[i] for i in range(len(self.batches)) if batchSizes[i] == nodesPerBatch]
             batchSizes = [size for size in batchSizes if size == nodesPerBatch]
+            batchSize = scipy.stats.mode([len(batch) for batch in self.batches])
+            batchSizes = [batchSizes[i] for i in range(len(batchSizes)) if len(self.batches[i]) == batchSize]
+            self.batches = [batch for batch in self.batches if len(batch) == batchSize]
 
-        plt.subplot(1, 2, 1)
+        plt.subplot(1, 3, 1)
         plt.title("Node Count Distribution per Sample")
         plt.hist(sizes)
 
-        plt.subplot(1, 2, 2)
+        plt.subplot(1, 3, 2)
         plt.title("Node Count Distribution per Batch")
         plt.hist(batchSizes)
+
+        plt.subplot(1, 3, 3)
+        plt.title("Data Samples Distribution per Batch")
+        plt.hist([len(batch) for batch in self.batches])
         plt.show()
 
     def __iter__(self):
