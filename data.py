@@ -424,7 +424,7 @@ class InundationData(Dataset):
 
 
 class GraphSizeSampler(Sampler):
-    def __init__(self, dataset, nodesPerBatch=500, dropLast=False):
+    def __init__(self, dataset, nodesPerBatch=500, dropLast=False, force=False):
         self.dataset = dataset
         self.nodesPerBatch = 500
         self.dropLast = dropLast
@@ -456,6 +456,11 @@ class GraphSizeSampler(Sampler):
 
             batch.append(indices[i])
             batchSum += sizes[i]
+
+        # For diagnosing memory leaks
+        if force:
+            self.batches = [self.batches[i] for i in range(len(self.batches)) if batchSizes[i] == nodesPerBatch]
+            batchSizes = [size for size in batchSizes if size == nodesPerBatch]
 
         plt.subplot(1, 2, 1)
         plt.title("Node Count Distribution per Sample")
