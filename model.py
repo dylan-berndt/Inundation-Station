@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import torch.cuda
 
 import torch_geometric.nn as gnn
 
@@ -23,10 +24,10 @@ class InundationCoder(nn.Module):
     def forward(self, inputs, state=None):
         # shape: [totalNodes, timesteps, features]
         inputShape = inputs.era5.shape
-        inputs.basinContinuous = inputs.basinContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
-        inputs.basinDiscrete = inputs.basinDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
-        basinContinuous = torch.concatenate([inputs.era5, inputs.basinContinuous], dim=-1)
-        projected = self.basinProjection(basinContinuous, inputs.basinDiscrete)
+        basinContinuous = inputs.basinContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
+        basinDiscrete = inputs.basinDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
+        basinProjected = torch.concatenate([inputs.era5, basinContinuous], dim=-1)
+        projected = self.basinProjection(basinProjected, basinDiscrete)
 
         # Process timestep by timestep 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉
         steps = []
@@ -41,10 +42,12 @@ class InundationCoder(nn.Module):
         batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)
         sampledBasin = attention[batchIndices, :, :]
 
-        inputs.riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
-        inputs.riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
-        riverContinuous = torch.concatenate([sampledBasin, inputs.riverContinuous], dim=-1)
-        series = self.riverProjection(riverContinuous, inputs.riverDiscrete)
+        del attention
+
+        riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
+        riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
+        riverProjected = torch.concatenate([sampledBasin, riverContinuous], dim=-1)
+        series = self.riverProjection(riverProjected, riverDiscrete)
 
         if state is not None:
             hidden, cell = state
@@ -78,6 +81,8 @@ class InundationStation(nn.Module):
 
         # shape: [batchSize, 1, mixtures]
         hindcast = [s[:, -1, :].unsqueeze(1) for s in series]
+
+        del series
 
         if self.config.future == 0:
             return hindcast, None
@@ -174,4 +179,62 @@ class InundationStation(nn.Module):
         return config
 
 
+# Memory profiling
+if __name__ == "__main__":
+    config = Config().load("config.json")
 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    torch.set_default_device(device)
+
+    continuousColumns = 140
+    discreteColumns = 10
+    discreteRange = 12
+    ranges = [discreteRange for _ in range(discreteColumns)]
+
+    config.encoder.basinProjection.continuousDim = continuousColumns + 7
+    config.decoder.basinProjection.continuousDim = continuousColumns + 7
+    config.encoder.riverProjection.continuousDim = continuousColumns + config.encoder.gat.hidden_channels
+    config.decoder.riverProjection.continuousDim = continuousColumns + config.decoder.gat.hidden_channels
+
+    config.encoder.basinProjection.discreteRange = ranges
+    config.decoder.basinProjection.discreteRange = ranges
+    config.encoder.riverProjection.discreteRange = ranges
+    config.decoder.riverProjection.discreteRange = ranges
+
+    era5 = torch.randn([2, 120, 7])
+    continuous = torch.randn([2, continuousColumns])
+    discrete = torch.randint(0, discreteRange, [2, discreteColumns])
+    continuous1 = torch.randn([2, continuousColumns])
+    discrete1 = torch.randint(0, discreteRange, [2, discreteColumns])
+    structure = torch.tensor([[0, 1], [1, 0]])
+    nodes = torch.tensor([1, 1])
+
+    discharge = torch.randn([2, 120])
+
+    fake = Config()
+    fake.era5 = era5
+    fake.basinContinuous = continuous
+    fake.basinDiscrete = discrete
+    fake.riverContinuous = continuous1
+    fake.riverDiscrete = discrete1
+    fake.edge_index = structure
+    fake.nodes = nodes
+
+    model = InundationStation(config)
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+    objective = CMALLoss()
+
+    lastMem = None
+
+    while True:
+        optimizer.zero_grad()
+        hindcast, forecast = model((fake, fake))
+        loss = objective(forecast, discharge)
+
+        loss.backward()
+        optimizer.step()
+
+        torch.cuda.empty_cache()
+        mem = torch.cuda.memory_allocated()
+        print(mem, mem - lastMem if lastMem is not None else 0)
+        lastMem = mem

@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import math
 from scipy.stats import pearson3
 from scipy.interpolate import CubicSpline
+from scipy.stats import mode
 
 import networkx as nx
 import duckdb
@@ -461,7 +462,7 @@ class GraphSizeSampler(Sampler):
         if force:
             self.batches = [self.batches[i] for i in range(len(self.batches)) if batchSizes[i] == nodesPerBatch]
             batchSizes = [size for size in batchSizes if size == nodesPerBatch]
-            batchSize = scipy.stats.mode([len(batch) for batch in self.batches])
+            batchSize = mode(np.array([len(batch) for batch in self.batches])).mode
             batchSizes = [batchSizes[i] for i in range(len(batchSizes)) if len(self.batches[i]) == batchSize]
             self.batches = [batch for batch in self.batches if len(batch) == batchSize]
 
