@@ -32,11 +32,14 @@ class InundationCoder(nn.Module):
         # Process timestep by timestep 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉
         steps = []
         for timestep in range(inputShape[1]):
-            step = projected[:, timestep]
-            steps.append(self.basinGAT(step, inputs.edge_index))
+            step = self.basinGAT(projected[:, timestep], inputs.edge_index)
+            steps.append(step)
+            del step
         
         # shape: [totalNodes, timesteps, features]
         attention = torch.stack(steps, dim=1)
+
+        del steps
 
         # shape: [batchSize, timesteps, features]
         batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)

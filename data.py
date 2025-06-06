@@ -355,13 +355,13 @@ class InundationData(Dataset):
         era5Future = self.forecastNoise(era5Future)
 
         # TODO: Convert from pandas to torch for faster processing
-        basinContinuous = [torch.tensor(self.basinContinuous.loc[int(basinID)].to_numpy(), dtype=torch.float32)
-                           for basinID in upstreamBasins]
-        basinDiscrete = [torch.tensor(self.basinDiscrete.loc[int(basinID)].to_numpy(dtype=np.int64), dtype=torch.long)
-                         for basinID in upstreamBasins]
+        basinContinuousList = [torch.tensor(self.basinContinuous.loc[int(basinID)].to_numpy(), dtype=torch.float32)
+                               for basinID in upstreamBasins]
+        basinDiscreteList = [torch.tensor(self.basinDiscrete.loc[int(basinID)].to_numpy(dtype=np.int64), dtype=torch.long)
+                             for basinID in upstreamBasins]
 
-        basinContinuous = torch.stack(basinContinuous, dim=0)
-        basinDiscrete = torch.stack(basinDiscrete, dim=0)
+        basinContinuous = torch.stack(basinContinuousList, dim=0)
+        basinDiscrete = torch.stack(basinDiscreteList, dim=0)
 
         riverContinuous = torch.tensor(self.riverContinuous.loc[grdcID].to_numpy(), dtype=torch.float32)
         riverDiscrete = torch.tensor(self.riverDiscrete.loc[grdcID].to_numpy(dtype=np.int64), dtype=torch.long)

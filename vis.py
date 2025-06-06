@@ -24,7 +24,7 @@ class Client:
 
 
 class Server:
-    def __init__(self, port=12001):
+    def __init__(self, port=12945):
         self.data = {}
         self.time = {}
 
