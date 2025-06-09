@@ -6,4 +6,5 @@ Operates on ERA5-Land data aggregated over HydroATLAS Level 7 basin geometries, 
 
 Future work would see aggregation over level 12 geometries for maximum granularity, as well as a continental scale dataset.
 
-![Inundation Station(1)](https://github.com/user-attachments/assets/9ff773e4-3d36-4b73-8796-d6094c309692)
+![Inundation Station(3)](https://github.com/user-attachments/assets/2c83d710-17bd-4cb0-a107-ce67b6c46618)
+
