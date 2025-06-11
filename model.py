@@ -14,7 +14,7 @@ class InundationCoder(nn.Module):
         self.config = config
 
         self.basinProjection = DualProjection(config.basinProjection)
-        self.basinGAT = gnn.models.GCN(**config.gat)
+        self.basinGAT = gnn.models.GAT(**config.gat)
 
         self.riverProjection = DualProjection(config.riverProjection)
         self.lstm = nn.LSTM(**config.lstm, batch_first=True)

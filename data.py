@@ -368,6 +368,11 @@ class InundationData(Dataset):
 
         structure = torch.transpose(torch.tensor(self.upstreamStructure[pfafID], dtype=torch.long), 0, 1).contiguous()
 
+        basinContinuous, basinDiscrete = torch.nan_to_num(basinContinuous), torch.nan_to_num(basinDiscrete, 0, 0, 0)
+        riverContinuous, riverDiscrete = torch.nan_to_num(riverContinuous), torch.nan_to_num(riverDiscrete, 0, 0, 0)
+        structure = torch.nan_to_num(structure, 0, 0, 0)
+        dischargeHistory, dischargeFuture = torch.nan_to_num(dischargeHistory), torch.nan_to_num(dischargeFuture)
+
         past = BasinData(
             era5=era5History,
             basinContinuous=basinContinuous,
@@ -406,19 +411,23 @@ class InundationData(Dataset):
     def info(self, sample=None):
         sample = self[0] if sample is None else sample
         (past, future), targets = sample
+
+        def summarizeTensor(tensor):
+            return f"{tensor.shape} {tensor.dtype} {torch.amin(tensor)} {torch.amax(tensor)}"
+
         data = f"""
         Total Samples: {len(self)}
-        Era5 History: {past.era5.shape} {past.era5.dtype}
-        Era5 Future: {future.era5.shape} {future.era5.dtype}
-        Basin Continuous: {past.basinContinuous.shape} {past.basinContinuous.dtype}
-        Basin Discrete: {past.basinDiscrete.shape} {past.basinDiscrete.dtype}
-        Structure: {past.edge_index.shape} {past.edge_index.dtype}
-        River Continuous: {past.riverContinuous.shape} {past.riverContinuous.dtype}
-        River Discrete: {past.riverDiscrete.shape} {past.riverDiscrete.dtype}
-        Discharge History: {targets.dischargeHistory.shape} {targets.dischargeHistory.dtype}
-        Discharge Future: {targets.dischargeFuture.shape} {targets.dischargeFuture.dtype}
-        Thresholds: {targets.thresholds.shape} {targets.thresholds.dtype}
-        Deviation: {targets.deviation.shape} {targets.deviation.dtype}
+        Era5 History: {summarizeTensor(past.era5)}
+        Era5 Future: {summarizeTensor(future.era5)} 
+        Basin Continuous: {summarizeTensor(past.basinContinuous)} 
+        Basin Discrete: {summarizeTensor(past.basinDiscrete)} 
+        Structure: {summarizeTensor(past.edge_index)} 
+        River Continuous: {summarizeTensor(past.riverContinuous)} 
+        River Discrete: {summarizeTensor(past.riverDiscrete)} 
+        Discharge History: {summarizeTensor(targets.dischargeHistory)} 
+        Discharge Future: {summarizeTensor(targets.dischargeFuture)} 
+        Thresholds: {summarizeTensor(targets.thresholds)} 
+        Deviation: {summarizeTensor(targets.deviation)} 
         """
 
         print(data)

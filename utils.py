@@ -93,13 +93,26 @@ class CMALNormalizedMeanAbsolute(nn.Module):
         return torch.mean(torch.abs(yPred - yTrue) / deviations)
 
 
-# TODO: Refactor for actual distributions with CDF
 class CMALPrecision(nn.Module):
-    def __init__(self, direction="above"):
+    def __init__(self, direction="above", batches=100):
         self.direction = direction
+        self.numBatches = batches
+        self.batches = []
         super().__init__()
 
     def forward(self, yPred, yTrue, thresholds, *args, **kwargs):
+        self.batches.append((yPred, yTrue, thresholds))
+
+        if len(self.batches) < self.numBatches:
+            return 0
+
+        if len(self.batches) > self.numBatches:
+            self.batches = self.batches[1:]
+
+        yPred = [torch.stack([batch[0][i] for batch in self.batches], dim=0) for i in range(4)]
+        yTrue = torch.stack([batch[1] for batch in self.batches], dim=0)
+        thresholds = torch.stack([batch[2] for batch in self.batches], dim=0)
+
         precision = []
         for i in range(thresholds.shape[-1]):
             threshold = thresholds[:, i]
@@ -120,13 +133,26 @@ class CMALPrecision(nn.Module):
         return precision
 
 
-# TODO: Refactor for actual distributions with CDF
 class CMALRecall(nn.Module):
-    def __init__(self, direction="above"):
+    def __init__(self, direction="above", batches=100):
         self.direction = direction
+        self.numBatches = batches
+        self.batches = []
         super().__init__()
 
     def forward(self, yPred, yTrue, thresholds, *args, **kwargs):
+        self.batches.append((yPred, yTrue, thresholds))
+
+        if len(self.batches) < self.numBatches:
+            return 0
+
+        if len(self.batches) > self.numBatches:
+            self.batches = self.batches[1:]
+
+        yPred = [torch.stack([batch[0][i] for batch in self.batches], dim=0) for i in range(4)]
+        yTrue = torch.stack([batch[1] for batch in self.batches], dim=0)
+        thresholds = torch.stack([batch[2] for batch in self.batches], dim=0)
+
         recall = []
         for i in range(thresholds.shape[-1]):
             threshold = thresholds[:, i]
