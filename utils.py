@@ -94,83 +94,79 @@ class CMALNormalizedMeanAbsolute(nn.Module):
 
 
 class CMALPrecision(nn.Module):
-    def __init__(self, direction="above", batches=100):
+    def __init__(self, direction="above", batches=100, sample=0):
         self.direction = direction
         self.numBatches = batches
         self.batches = []
+        self.sampleNum = sample
         super().__init__()
 
     def forward(self, yPred, yTrue, thresholds, *args, **kwargs):
         self.batches.append((yPred, yTrue, thresholds))
 
         if len(self.batches) < self.numBatches:
-            return 0
+            return [0 for _ in range(thresholds.shape[-1])]
 
         if len(self.batches) > self.numBatches:
             self.batches = self.batches[1:]
 
-        yPred = [torch.stack([batch[0][i] for batch in self.batches], dim=0) for i in range(4)]
-        yTrue = torch.stack([batch[1] for batch in self.batches], dim=0)
-        thresholds = torch.stack([batch[2] for batch in self.batches], dim=0)
+        yPredC = [torch.cat([batch[0][i] for batch in self.batches], dim=0) for i in range(4)]
+        yTrueC = torch.cat([batch[1] for batch in self.batches], dim=0)
+        thresholdsC = torch.cat([batch[2] for batch in self.batches], dim=0)
 
-        precision = []
-        for i in range(thresholds.shape[-1]):
-            threshold = thresholds[:, i]
-            yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
+        yPredV = torch.sum(yPredC[0] * yPredC[3], dim=-1)
 
-            tp = (yPred >= threshold).float() * (yTrue >= threshold).float()
-            fp = (yPred >= threshold).float() * (yTrue < threshold).float()
+        threshold = thresholdsC[:, self.sampleNum].unsqueeze(-1)
 
-            if self.direction == "below":
-                tp = 1 - tp
-                fn = 1 - fn
+        tp = (yPredV >= threshold).float() * (yTrueC >= threshold).float()
+        fp = (yPredV >= threshold).float() * (yTrueC < threshold).float()
 
-            tp = torch.sum(tp)
-            fp = torch.sum(fp)
+        if self.direction == "below":
+            tp = (yPredV < threshold).float() * (yTrueC < threshold).float()
+            fp = (yPredV <= threshold).float() * (yTrueC > threshold).float()
 
-            precision.append((tp / (tp + fp + 1e-8)).item())
+        tp = torch.sum(tp)
+        fp = torch.sum(fp)
 
-        return precision
+        return (tp / (tp + fp + 1e-8)).item()
 
 
 class CMALRecall(nn.Module):
-    def __init__(self, direction="above", batches=100):
+    def __init__(self, direction="above", batches=100, sample=0):
         self.direction = direction
         self.numBatches = batches
         self.batches = []
+        self.sampleNum=sample
         super().__init__()
 
     def forward(self, yPred, yTrue, thresholds, *args, **kwargs):
         self.batches.append((yPred, yTrue, thresholds))
 
         if len(self.batches) < self.numBatches:
-            return 0
+            return [0 for _ in range(thresholds.shape[-1])]
 
         if len(self.batches) > self.numBatches:
             self.batches = self.batches[1:]
 
-        yPred = [torch.stack([batch[0][i] for batch in self.batches], dim=0) for i in range(4)]
-        yTrue = torch.stack([batch[1] for batch in self.batches], dim=0)
-        thresholds = torch.stack([batch[2] for batch in self.batches], dim=0)
+        yPredC = [torch.cat([batch[0][i] for batch in self.batches], dim=0) for i in range(4)]
+        yTrueC = torch.cat([batch[1] for batch in self.batches], dim=0)
+        thresholdsC = torch.cat([batch[2] for batch in self.batches], dim=0)
 
-        recall = []
-        for i in range(thresholds.shape[-1]):
-            threshold = thresholds[:, i]
-            yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
+        yPredV = torch.sum(yPredC[0] * yPredC[3], dim=-1)
 
-            tp = (yPred >= threshold).float() * (yTrue >= threshold).float()
-            fn = (yPred < threshold).float() * (yTrue >= threshold).float()
+        threshold = thresholdsC[:, self.sampleNum].unsqueeze(-1)
 
-            if self.direction == "below":
-                tp = 1 - tp
-                fn = 1 - fn
+        tp = (yPredV >= threshold).float() * (yTrueC >= threshold).float()
+        fn = (yPredV < threshold).float() * (yTrueC >= threshold).float()
 
-            tp = torch.sum(tp)
-            fn = torch.sum(fn)
+        if self.direction == "below":
+            tp = (yPredV < threshold).float() * (yTrueC < threshold).float()
+            fn = (yPredV > threshold).float() * (yTrueC < threshold).float()
 
-            recall.append((tp / (tp + fn + 1e-8)).item())
+        tp = torch.sum(tp)
+        fn = torch.sum(fn)
 
-        return recall
+        return (tp / (tp + fn + 1e-8)).item()
 
 
 def sampleCMAL(yPred, numSamples):
