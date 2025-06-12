@@ -37,7 +37,7 @@ def calculateReturnPeriods(df, periods=None, maximums=True):
     df = df.copy()
     # Results in negative year values but still works ig
     start = datetime(2000, 1, 1).timestamp()
-    secondsInYear = 60 * 60 * 25 * 365
+    secondsInYear = 60 * 60 * 24 * 365
     df['year'] = df['YYYY-MM-DD'].apply(lambda x: (x - start) // secondsInYear).astype(int)
 
     annuals = df.groupby('year')[' Value'].max().dropna() if maximums else df.groupby('year')[' Value'].min().dropna()
