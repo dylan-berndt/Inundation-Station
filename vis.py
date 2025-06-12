@@ -24,8 +24,8 @@ class Client:
         self.socket.connect((host, port))
 
     def send(self, name, data):
-        collated = f"  {name}||{data:.3f}"
-        self.socket.send(bytes(collated, encoding='utf-8'))
+        collated = f" | {name}||{data:.3f}"
+        self.socket.sendall(bytes(collated, encoding='utf-8'))
 
 
 class Server:
@@ -53,9 +53,9 @@ class Server:
                 pass
 
     def receive(self):
-        stringData = self.client.recv(512).decode(encoding='utf-8')
+        stringData = self.client.recv(4096).decode(encoding='utf-8')
 
-        dataPoints = stringData.split("  ")
+        dataPoints = stringData.split(" | ")
         for data in dataPoints:
             if not data:
                 continue
@@ -157,7 +157,6 @@ class DataGUI:
                 pass
             time.sleep(0.01)
 
-    # TODO: Two plots per series
     def createPlot(self, name, row, col):
         plotFrame = ttk.Frame(self.scrollFrame)
         plotFrame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
@@ -182,6 +181,7 @@ class DataGUI:
             "frame": plotFrame,
             "figure": fig,
             "ax1": ax1,
+            "ax2": ax2,
             "canvas": canvas
         }
 
@@ -194,9 +194,10 @@ class DataGUI:
         existingPlots = set(self.plots.keys())
 
         for key in currentDataSeries - existingPlots:
-            row = len(self.plots) // 2
+            row = len(self.plots)
             col = 0
             self.plots[key] = self.createPlot(key, row, col)
+            self.canvas.update_idletasks()
 
         for name, plot in self.plots.items():
             point = np.array(self.server.time[name])
@@ -238,22 +239,4 @@ if __name__ == "__main__":
     server = Server()
     gui = DataGUI(server)
     gui.run()
-
-    # last = datetime.now()
-
-    # plt.ion()
-    # fig = plt.figure()
-    # # fig.canvas.manager.window.attributes('-topmost', 0)
-
-    # while True:
-    #     try:
-    #         server.receive()
-    #     except ValueError:
-    #         pass
-    #     except BlockingIOError:
-    #         pass
-
-    #     if (datetime.now() - last).total_seconds() > DISPLAY_REFRESH:
-    #         last = datetime.now()
-    #         plotData(server.data)
 
