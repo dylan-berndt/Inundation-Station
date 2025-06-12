@@ -90,7 +90,7 @@ class CMALNormalizedMeanAbsolute(nn.Module):
 
     def forward(self, yPred, yTrue, deviations, *args, **kwargs):
         yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
-        return torch.mean(torch.abs(yPred - yTrue) / deviations)
+        return torch.mean(torch.abs(yPred - yTrue) / deviations).item()
 
 
 class CMALPrecision(nn.Module):
@@ -105,7 +105,7 @@ class CMALPrecision(nn.Module):
         self.batches.append((yPred, yTrue, thresholds))
 
         if len(self.batches) < self.numBatches:
-            return [0 for _ in range(thresholds.shape[-1])]
+            return 0
 
         if len(self.batches) > self.numBatches:
             self.batches = self.batches[1:]
@@ -128,7 +128,9 @@ class CMALPrecision(nn.Module):
         tp = torch.sum(tp)
         fp = torch.sum(fp)
 
-        return (tp / (tp + fp + 1e-8)).item()
+        value = tp / (tp + fp + 1e-8)
+        value = torch.nan_to_num(value, 0, 0, 0)
+        return value.item()
 
 
 class CMALRecall(nn.Module):
@@ -143,7 +145,7 @@ class CMALRecall(nn.Module):
         self.batches.append((yPred, yTrue, thresholds))
 
         if len(self.batches) < self.numBatches:
-            return [0 for _ in range(thresholds.shape[-1])]
+            return 0
 
         if len(self.batches) > self.numBatches:
             self.batches = self.batches[1:]
@@ -166,7 +168,9 @@ class CMALRecall(nn.Module):
         tp = torch.sum(tp)
         fn = torch.sum(fn)
 
-        return (tp / (tp + fn + 1e-8)).item()
+        value = tp / (tp + fn + 1e-8)
+        value = torch.nan_to_num(value, 0, 0, 0)
+        return value.item()
 
 
 def sampleCMAL(yPred, numSamples):
