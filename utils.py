@@ -68,6 +68,7 @@ class Config:
             return data
 
 
+# TODO: Determine effect of shape on loss (larger time ranges have larger loss?) (this was written by google engineers?)
 class CMALLoss(nn.Module):
     def __init__(self):
         super().__init__()

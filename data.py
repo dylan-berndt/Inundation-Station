@@ -383,7 +383,8 @@ class InundationData(Dataset):
             riverDiscrete=riverDiscrete,
 
             num_nodes=len(upstreamBasins),
-            nodes=len(upstreamBasins)
+            nodes=len(upstreamBasins),
+            grdcID=grdcID
         )
 
         future = BasinData(
@@ -396,7 +397,8 @@ class InundationData(Dataset):
             riverDiscrete=riverDiscrete,
 
             num_nodes=len(upstreamBasins),
-            nodes=len(upstreamBasins)
+            nodes=len(upstreamBasins),
+            grdcID=grdcID
         )
 
         targets = BasinData(
@@ -434,10 +436,11 @@ class InundationData(Dataset):
 
 
 class GraphSizeSampler(Sampler):
-    def __init__(self, dataset, nodesPerBatch=500, dropLast=False, force=False):
+    def __init__(self, dataset, nodesPerBatch=500, dropLast=False, force=False, shuffle=True):
         self.dataset = dataset
         self.nodesPerBatch = 500
         self.dropLast = dropLast
+        self.shuffle = shuffle
 
         self.batches = []
 
@@ -450,9 +453,10 @@ class GraphSizeSampler(Sampler):
             indices = range(len(subsetIndices))
             sizes = [under.graphSizes[subsetIndices[i]] for i in indices]
 
-        combined = list(zip(indices, sizes))
-        random.shuffle(combined)
-        indices, sizes = zip(*combined)
+        if self.shuffle:
+            combined = list(zip(indices, sizes))
+            random.shuffle(combined)
+            indices, sizes = zip(*combined)
 
         batch = []
         batchSizes = []
@@ -489,7 +493,8 @@ class GraphSizeSampler(Sampler):
         plt.show()
 
     def __iter__(self):
-        random.shuffle(self.batches)
+        if self.shuffle:
+            random.shuffle(self.batches)
         for batch in self.batches:
             yield batch
 
