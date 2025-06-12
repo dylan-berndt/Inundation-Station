@@ -37,6 +37,21 @@ class PositionalEncoding(nn.Module):
         indices = torch.arange(x.size(1) if self.encoding.batch_first else x.size(0))
 
         return self.encoding(x, indices)
+    
+
+class SingleProjection(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        self.encodingDim = config.continuousDim
+
+        self.dropout = nn.Dropout(config.dropout)
+        self.fc = nn.Linear(self.encodingDim, config.outputDim)
+
+    def forward(self, x):
+        encodings = self.dropout(self.fc(x))
+
+        return encodings
 
 
 class DualProjection(nn.Module):

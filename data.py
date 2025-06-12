@@ -503,6 +503,9 @@ class GraphSizeSampler(Sampler):
 
 
 class FloodHubData(InundationData):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
     def __getitem__(self, i):
         pass
 

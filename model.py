@@ -85,15 +85,11 @@ class InundationStation(nn.Module):
         # shape: [batchSize, 1, mixtures]
         hindcast = [s[:, -1, :].unsqueeze(1) for s in series]
 
-        del series
-
         if self.config.future == 0:
             return hindcast, None
 
         hidden, cell = self.hiddenBridge(hidden), self.cellBridge(cell)
         series, _ = self.decoder(future, (hidden, cell))
-
-        del _
 
         forecast = series
 
@@ -180,6 +176,56 @@ class InundationStation(nn.Module):
         config.decoder = decoder
 
         return config
+    
+
+class FloodCoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        # Can't include basin discrete due to how the hell would I do that
+        # I have an idea but like come on [sum(basinArea * embeddingVector per basin) / sum(totalBasinArea)]
+        self.basinProjection = SingleProjection(config.basinProjection)
+        self.riverProjection = DualProjection(config.riverProjection)
+
+        self.lstm = nn.LSTM(**config.lstm, batch_first=True)
+
+        self.head = CMAL(**config.head)
+
+    # TODO: Determine format of inputs
+    def forward(self, inputs, state=None):
+        pass
+    
+
+class FloodHub(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        self.encoder = FloodCoder(config.encoder)
+
+        self.hiddenBridge = nn.Sequential(
+            nn.Linear(**config.bridge),
+            nn.Tanh()
+        )
+        self.cellBridge = nn.Linear(**config.bridge)
+
+        self.decoder = FloodCoder(config.decoder)
+
+    def forward(self, inputs):
+        past, future = inputs
+        series, (hidden, cell) = self.encoder(past)
+
+        # shape: [batchSize, 1, mixtures]
+        hindcast = [s[:, -1, :].unsqueeze(1) for s in series]
+
+        if self.config.future == 0:
+            return hindcast, None
+
+        hidden, cell = self.hiddenBridge(hidden), self.cellBridge(cell)
+        series, _ = self.decoder(future, (hidden, cell))
+
+        forecast = series
+
+        return hindcast, forecast
 
 
 # Memory profiling
