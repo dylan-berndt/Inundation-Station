@@ -16,10 +16,11 @@
             "dropout": 0.2,
             "outputDim": 128
         },
-        "gat": {
+        "gnn": {
             "in_channels": 128,
             "hidden_channels": 128,
-            "num_layers": 8
+            "num_layers": 8,
+            "norm": "layer"
         },
         "lstm": {
             "input_size": 128,
@@ -47,10 +48,11 @@
             "dropout": 0.2,
             "outputDim": 128
         },
-        "gat": {
+        "gnn": {
             "in_channels": 128,
             "hidden_channels": 128,
-            "num_layers": 8
+            "num_layers": 8,
+            "norm": "layer"
         },
         "lstm": {
             "input_size": 128,

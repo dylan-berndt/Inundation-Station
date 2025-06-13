@@ -20,7 +20,8 @@
             "gnn": {
                 "in_channels": 128,
                 "hidden_channels": 128,
-                "num_layers": 2
+                "num_layers": 2,
+                "norm": "layer"
             },
             "lstm": {
                 "input_size": 128,
@@ -54,7 +55,8 @@
             "gnn": {
                 "in_channels": 128,
                 "hidden_channels": 128,
-                "num_layers": 2
+                "num_layers": 2,
+                "norm": "layer"
             },
             "lstm": {
                 "input_size": 128,
