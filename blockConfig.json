@@ -16,17 +16,20 @@
             "dropout": 0.2,
             "outputDim": 128
         },
-        "gnn": {
-            "in_channels": 128,
-            "hidden_channels": 128,
-            "num_layers": 8,
-            "norm": "layer"
+        "block": {
+            "gnn": {
+                "in_channels": 128,
+                "hidden_channels": 128,
+                "num_layers": 2,
+                "norm": "layer"
+            },
+            "lstm": {
+                "input_size": 128,
+                "hidden_size": 128,
+                "num_layers": 2
+            }
         },
-        "lstm": {
-            "input_size": 128,
-            "hidden_size": 128,
-            "num_layers": 2
-        },
+        "blocks": 4,
         "head": {
             "inputDim": 128,
             "hiddenDim": 256,
@@ -48,17 +51,20 @@
             "dropout": 0.2,
             "outputDim": 128
         },
-        "gnn": {
-            "in_channels": 128,
-            "hidden_channels": 128,
-            "num_layers": 8,
-            "norm": "layer"
+        "block": {
+            "gnn": {
+                "in_channels": 128,
+                "hidden_channels": 128,
+                "num_layers": 2,
+                "norm": "layer"
+            },
+            "lstm": {
+                "input_size": 128,
+                "hidden_size": 128,
+                "num_layers": 2
+            }
         },
-        "lstm": {
-            "input_size": 128,
-            "hidden_size": 128,
-            "num_layers": 2
-        },
+        "blocks": 3,
         "head": {
             "inputDim": 128,
             "hiddenDim": 256,

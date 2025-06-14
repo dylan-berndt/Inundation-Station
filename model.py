@@ -8,13 +8,98 @@ from modules import *
 from utils import *
 
 
+class InundationBlock(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.config = config
+
+        self.basinGNN = gnn.models.GCN(**config.gnn)
+
+        self.lstm = nn.LSTM(**config.lstm, batch_first=True)
+
+    def forward(self, inputs, state=None):
+        series, (hidden, cell) = self.lstm(inputs, state)
+
+        steps = []
+        for timestep in range(inputs.shape[1]):
+            step = self.basinGNN(series[:, timestep], inputs.edge_index)
+            steps.append(step)
+            del step
+
+        graph = torch.stack(steps, dim=1)
+
+        del steps
+
+        return graph, (hidden, cell)
+
+
+class InundationBlockCoder(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.config = config
+
+        self.basinProjection = DualProjection(config.basinProjection)
+        self.riverProjection = DualProjection(config.riverProjection)
+
+        self.modules = nn.ModuleList([InundationBlock(config.block) for _ in range(config.blocks)])
+
+        self.head = CMAL(**config.head)
+
+    def forward(self, inputs, state=None):
+        inputShape = inputs.era5.shape
+        basinContinuous = inputs.basinContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
+        basinDiscrete = inputs.basinDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
+        basinProjected = torch.concatenate([inputs.era5, basinContinuous], dim=-1)
+        projected = self.basinProjection(basinProjected, basinDiscrete)
+
+        for module in self.modules:
+            coded, state = module(projected)
+            projected += coded
+
+        batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)
+        sampledBasin = projected[batchIndices, :, :]
+
+        riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
+        riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
+        riverProjected = torch.concatenate([sampledBasin, riverContinuous], dim=-1)
+        series = self.riverProjection(riverProjected, riverDiscrete)
+
+        return series, state
+
+
+class InundationBlockStation(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.config = config
+
+        self.encoder = InundationBlockCoder(config.encoder)
+
+        self.hiddenBridge = nn.Sequential(
+            nn.Linear(**config.bridge),
+            nn.Tanh()
+        )
+        self.cellBridge = nn.Linear(**config.bridge)
+
+        self.decoder = InundationBlockCoder(config.decoder)
+
+    def forward(self, inputs):
+        past, future = inputs
+
+        hindcast, (hidden, cell) = self.encoder(past)
+        hidden = self.hiddenBridge(hidden)
+        cell = self.cellBridge(cell)
+        forecast, _ = self.decoder(future, (hidden, cell))
+
+        return hindcast, forecast
+
+
 class InundationCoder(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
         self.config = config
 
         self.basinProjection = DualProjection(config.basinProjection)
-        self.basinGAT = gnn.models.GAT(**config.gat)
+        self.basinGAT = gnn.models.GAT(**config.gnn)
 
         self.riverProjection = DualProjection(config.riverProjection)
         self.lstm = nn.LSTM(**config.lstm, batch_first=True)
