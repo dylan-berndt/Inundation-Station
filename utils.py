@@ -91,7 +91,7 @@ class CMALNormalizedMeanAbsolute(nn.Module):
 
     def forward(self, yPred, yTrue, deviations, *args, **kwargs):
         yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
-        return torch.mean(torch.abs(yPred - yTrue) / deviations).item()
+        return torch.mean(torch.abs(yPred - yTrue)).item()
 
 
 class CMALPrecision(nn.Module):

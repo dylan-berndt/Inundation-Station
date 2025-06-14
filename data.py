@@ -133,12 +133,13 @@ class InundationData(Dataset):
             grdcDict[riverID]["Time"] = df["YYYY-MM-DD"].to_numpy()
             grdcDict[riverID]["Stage"] = torch.tensor(values, dtype=torch.float32)
             grdcDict[riverID]["Thresholds"] = calculateReturnPeriods(df)
+            grdcDict[riverID]["Mean"] = np.mean(values)
             grdcDict[riverID]["Deviation"] = np.std(values)
             allTargets.extend(list(values))
 
             print(f"\r{f + 1}/{len(grdcPaths)} GRDC files loaded", end="")
 
-        self.targetMean, self.targetDev = np.mean(allTargets), np.std(allTargets)
+        # self.targetMean, self.targetDev = np.mean(allTargets), np.std(allTargets)
 
         print()
 
@@ -325,14 +326,16 @@ class InundationData(Dataset):
 
         riverTime = riverTime[offset: offset + self.config.history + self.config.future]
 
+        targetMean, targetDev = self.grdcDict[grdcID]["Mean"], self.grdcDict[grdcID]["Deviation"]
+
         dischargeHistory = riverStage[offset: offset + self.config.history]
-        dischargeHistory = (dischargeHistory - self.targetMean) / self.targetDev
+        dischargeHistory = (dischargeHistory - targetMean) / targetDev
 
         dischargeFuture = riverStage[offset + self.config.history: offset + self.config.history + self.config.future]
-        dischargeFuture = (dischargeFuture - self.targetMean) / self.targetDev
+        dischargeFuture = (dischargeFuture - targetMean) / targetDev
 
         thresholds = self.grdcDict[grdcID]["Thresholds"]
-        thresholds = [(threshold - self.targetMean) / self.targetDev for threshold in thresholds]
+        thresholds = [(threshold - targetMean) / targetDev for threshold in thresholds]
 
         deviation = self.grdcDict[grdcID]["Deviation"]
 
@@ -409,7 +412,7 @@ class InundationData(Dataset):
             dischargeHistory=dischargeHistory,
             dischargeFuture=dischargeFuture,
             thresholds=torch.tensor(thresholds, dtype=torch.float32),
-            deviation=torch.tensor(deviation / self.targetDev, dtype=torch.float32)
+            deviation=torch.tensor(deviation, dtype=torch.float32)
         )
 
         return (past, future), targets
