@@ -295,8 +295,12 @@ class InundationData(Dataset):
         # This stinks
         config.encoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
         config.decoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
-        config.encoder.riverProjection.continuousDim = len(self.riverContinuous.columns) + config.encoder.gat.hidden_channels
-        config.decoder.riverProjection.continuousDim = len(self.riverContinuous.columns) + config.decoder.gat.hidden_channels
+        config.encoder.riverProjection.continuousDim = len(self.riverContinuous.columns)
+        config.decoder.riverProjection.continuousDim = len(self.riverContinuous.columns)
+
+        multiplier = 1
+        config.encoder.riverProjection.continuousDim += multiplier * config.encoder.gat.hidden_channels
+        config.decoder.riverProjection.continuousDim += multiplier * config.decoder.gat.hidden_channels
 
         # Like bad
         config.encoder.basinProjection.discreteRange = self.basinDiscreteColumnRanges
