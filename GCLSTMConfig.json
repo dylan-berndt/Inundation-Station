@@ -5,7 +5,6 @@
     "dataSplit": 0.8,
     "history": 120,
     "future": 7,
-    "appendDimensionPath": "encoder.block.gnn.out_channels",
     "encoder": {
         "basinProjection": {
             "discreteDim": 4,
@@ -17,14 +16,11 @@
             "dropout": 0.2,
             "outputDim": 64
         },
-        "block": {
-            "gnn": {
-                "in_channels": 64,
-                "out_channels": 64,
-                "K": 3
-            }
+        "gnn": {
+            "in_channels": 64,
+            "out_channels": 64,
+            "K": 3
         },
-        "blocks": 2,
         "head": {
             "inputDim": 64,
             "hiddenDim": 256,
@@ -46,14 +42,11 @@
             "dropout": 0.2,
             "outputDim": 64
         },
-        "block": {
-            "gnn": {
-                "in_channels": 64,
-                "out_channels": 64,
-                "K": 3
-            }
+        "gnn": {
+            "in_channels": 64,
+            "out_channels": 64,
+            "K": 3
         },
-        "blocks": 2,
         "head": {
             "inputDim": 64,
             "hiddenDim": 256,

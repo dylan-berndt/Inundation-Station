@@ -90,6 +90,8 @@ class InundationData(Dataset):
 
         riverSHP = riverSHP.set_index("id")
 
+        self.riverSHP = riverSHP
+
         for grdcID, row in riverSHP.iterrows():
             grdcDict[grdcID] = {}
 
@@ -445,6 +447,22 @@ class InundationData(Dataset):
 
         print(data)
 
+    def display(self, sample=None, lat=None, lon=None):
+        if lat is None:
+            sample = self[0] if sample is None else sample
+            (past, future), targets = sample
+        else:
+            pass
+
+        rivers = self.riverSHP.loc[past.grdcID]
+        locations = gpd.GeoDataFrame(rivers[["lat", "lon"]], crs={"init": "EPSG:4326"}, geometry=gpd.points_from_xy(rivers.lon, rivers.lat))
+
+        # BasinATLAS for basin shapes
+        fig, ax = plt.subplots()
+        basins.plot(ax=ax, color='white', edgecolor='blue')
+        locations.plot(ax=ax, marker='o', color='red', markersize=5)
+        plt.show()
+
 
 class GraphSizeSampler(Sampler):
     def __init__(self, dataset, nodesPerBatch=500, dropLast=False, force=False, shuffle=True):
@@ -556,4 +574,8 @@ if __name__ == "__main__":
 
     dataset = InundationData(config)
     dataset.info()
+
+    newMadrid = 36.58144457928249, -89.53144490406078
+
+    dataset.display(lat=newMadrid[0], lon=newMadrid[1])
 

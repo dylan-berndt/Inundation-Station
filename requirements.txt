@@ -1,0 +1,10 @@
+torch
+torch-geometric
+torch-geometric-temporal
+pandas
+geopandas
+numpy
+scikit-learn
+networkx
+duckdb
+performer-pytorch

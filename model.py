@@ -1,9 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import torch.cuda
 
 import torch_geometric.nn as gnn
 import torch_geometric_temporal.nn as tgnn
+
+from torch_geometric.nn import GINEConv, GPSConv, global_add_pool
+from torch_geometric.nn.attention import PerformerAttention
+import torch_geometric.transforms as T
 
 from modules import *
 from utils import *
