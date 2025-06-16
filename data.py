@@ -159,6 +159,7 @@ class InundationData(Dataset):
                 basinData = np.zeros([int(end - start), 8])
                 basinData[0, :] = start
                 sumLakes += 1
+
             pfafDict[pfafID]["Data"] = torch.nan_to_num(torch.tensor(basinData, dtype=torch.float32))
 
             print(f"\r{f + 1}/{len(era5Paths)} ERA5 files loaded", end="")
@@ -194,8 +195,7 @@ class InundationData(Dataset):
             node: [node] + list(nx.ancestors(graph, node)) for node in self.pfafDict.keys()
         }
 
-        # Stupid fucking Russian basins somehow upstream of North American streams?
-        # And Panama is annoying?
+        # Removing basins, rivers with upstream basins outside North America
         for node in list(self.grdcDict.keys()):
             pfafID = translateDict[node]
             if pfafID not in self.upstreamBasins:
@@ -293,6 +293,7 @@ class InundationData(Dataset):
         self.riverContinuous = self.riverContinuous.dropna(axis=1)
         self.riverDiscrete = self.riverDiscrete.dropna(axis=1)
 
+        # TODO: Fix due to differing architectures 🎉🎉🎉🎉🎉
         # This stinks
         config.encoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
         config.decoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
@@ -300,8 +301,8 @@ class InundationData(Dataset):
         config.decoder.riverProjection.continuousDim = len(self.riverContinuous.columns)
 
         multiplier = 1
-        config.encoder.riverProjection.continuousDim += multiplier * config.encoder.gat.hidden_channels
-        config.decoder.riverProjection.continuousDim += multiplier * config.decoder.gat.hidden_channels
+        config.encoder.riverProjection.continuousDim += multiplier * config.encoder.block.gnn.hidden_channels
+        config.decoder.riverProjection.continuousDim += multiplier * config.decoder.block.gnn.hidden_channels
 
         # Like bad
         config.encoder.basinProjection.discreteRange = self.basinDiscreteColumnRanges
@@ -349,7 +350,11 @@ class InundationData(Dataset):
 
             # Hope that these are in order
             for k, key in enumerate(self.era5Scales.keys()):
-                data[:, k] = (data[:, k] - self.era5Scales[key][0]) / self.era5Scales[key][1]
+                scale = self.era5Scales[key][1]
+                # Area-weighted scaling :(
+                if "_sum" in key:
+                    scale += self.basinContinuous.loc[int(basin)]["SUB_AREA"]
+                data[:, k] = (data[:, k] - self.era5Scales[key][0]) / scale
 
             data = torch.nan_to_num(data)
 

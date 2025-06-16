@@ -78,11 +78,21 @@ class CMALLoss(nn.Module):
 
         error = yTrue.unsqueeze(-1) - m
         logLike = torch.log(t) + torch.log(1.0 - t) - torch.log(b) - torch.max(t * error, (t - 1.0) * error) / b
-        logWeights = torch.log(p + 1e-8)
+        logWeights = torch.log(p + 1e-4)
 
         result = torch.logsumexp(logWeights + logLike, dim=2)
         result = -torch.mean(torch.sum(result, dim=1))
         return result
+
+
+class CMALMSE(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, yPred, yTrue):
+        m, b, t, p = yPred
+        yPred = torch.sum(m * p, dim=-1)
+        return torch.mean(torch.pow(yPred - yTrue, 2))
 
 
 class CMALNormalizedMeanAbsolute(nn.Module):

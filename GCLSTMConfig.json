@@ -1,7 +1,7 @@
 {
     "path": "data",
     "batchSize": 8,
-    "nodesPerBatch": 1000,
+    "nodesPerBatch": 2000,
     "dataSplit": 0.8,
     "history": 120,
     "future": 7,
@@ -9,58 +9,46 @@
         "basinProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 64
         },
         "riverProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 64
         },
         "gnn": {
-            "in_channels": 128,
-            "hidden_channels": 128,
-            "num_layers": 8,
-            "norm": "layer"
-        },
-        "lstm": {
-            "input_size": 128,
-            "hidden_size": 128,
-            "num_layers": 2
+            "in_channels": 64,
+            "out_channels": 64,
+            "K": 3
         },
         "head": {
-            "inputDim": 128,
+            "inputDim": 64,
             "hiddenDim": 256,
             "mixtures": 12
         }
     },
     "bridge": {
-        "in_features": 128,
-        "out_features": 128
+        "in_features": 64,
+        "out_features": 64
     },
     "decoder": {
         "basinProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 64
         },
         "riverProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 64
         },
         "gnn": {
-            "in_channels": 128,
-            "hidden_channels": 128,
-            "num_layers": 8,
-            "norm": "layer"
-        },
-        "lstm": {
-            "input_size": 128,
-            "hidden_size": 128,
-            "num_layers": 2
+            "in_channels": 64,
+            "out_channels": 64,
+            "K": 3
         },
         "head": {
-            "inputDim": 128,
+            "inputDim": 64,
             "hiddenDim": 256,
             "mixtures": 12
         }
