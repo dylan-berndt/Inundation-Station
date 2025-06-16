@@ -9,7 +9,7 @@ from modules import *
 from utils import *
 
 
-class InundationGCLSTM(nn.Module):
+class InundationGCLSTMBlock(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
 
@@ -36,7 +36,7 @@ class InundationGCLSTMCoder(nn.Module):
         self.basinProjection = DualProjection(config.basinProjection)
         self.riverProjection = DualProjection(config.riverProjection)
 
-        self.blocks = nn.ModuleList([InundationBlock(config.block) for _ in range(config.blocks)])
+        self.blocks = nn.ModuleList([InundationGCLSTMBlock(config.block) for _ in range(config.blocks)])
 
         self.head = CMAL(**config.head)
 
@@ -78,7 +78,14 @@ class InundationGCLSTMStation(nn.Module):
         self.decoder = InundationGCLSTMCoder(config.decoder)
 
     def forward(self, inputs, state=None):
-        pass
+        past, future = inputs
+
+        hindcast, (hidden, cell) = self.encoder(past)
+        hidden = self.hiddenBridge(hidden)
+        cell = self.cellBridge(cell)
+        forecast, _ = self.decoder(future, (hidden, cell))
+
+        return hindcast, forecast
 
 
 class InundationBlock(nn.Module):

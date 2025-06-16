@@ -135,6 +135,8 @@ def era5Scales(path):
 
         # I'm not actually sure this is perfectly correct
         # for actual variance, but it doesn't really matter as long as it's close
+        # TODO: WHY THE FUCK DID I LEAVE IT POTENTIALLY BROKEN
+        # TODO: Add basin area scaling
         for column in df.columns:
             if column not in scales:
                 mean = df[column].mean()
