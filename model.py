@@ -21,11 +21,11 @@ class InundationGCLSTMBlock(nn.Module):
 
         outputs = []
         for t in range(sequence):
-            H, C = self.gclstm(sequence[:, t], edges, hidden, cell)
-            outputs.append(H)
+            hidden, cell = self.gclstm(sequence[:, t], edges, hidden, cell)
+            outputs.append(hidden)
 
-        sequence_output = torch.stack(outputs, dim=1)
-        return sequence_output, (hidden, cell)
+        series = torch.stack(outputs, dim=1)
+        return series, (hidden, cell)
 
 
 class InundationGCLSTMCoder(nn.Module):
@@ -36,7 +36,7 @@ class InundationGCLSTMCoder(nn.Module):
         self.basinProjection = DualProjection(config.basinProjection)
         self.riverProjection = DualProjection(config.riverProjection)
 
-        self.blocks = nn.ModuleList([InundationGCLSTMBlock(config.block) for _ in range(config.blocks)])
+        self.block = InundationGCLSTMBlock(config.block)
 
         self.head = CMAL(**config.head)
 
@@ -47,12 +47,10 @@ class InundationGCLSTMCoder(nn.Module):
         basinProjected = torch.concatenate([inputs.era5, basinContinuous], dim=-1)
         projected = self.basinProjection(basinProjected, basinDiscrete)
 
-        for b, block in enumerate(self.blocks):
-            coded, newState = block(projected, inputs.edge_index, state)
-            projected = projected + coded
+        convolved, newState = self.block(projected, inputs.edge_index, state)
 
         batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)
-        sampledBasin = projected[batchIndices, :, :]
+        sampledBasin = convolved[batchIndices, :, :]
 
         riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
         riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
@@ -77,7 +75,7 @@ class InundationGCLSTMStation(nn.Module):
 
         self.decoder = InundationGCLSTMCoder(config.decoder)
 
-    def forward(self, inputs, state=None):
+    def forward(self, inputs):
         past, future = inputs
 
         hindcast, (hidden, cell) = self.encoder(past)

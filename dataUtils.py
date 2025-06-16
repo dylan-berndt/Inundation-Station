@@ -123,7 +123,7 @@ def classifyColumns(df, config, name):
     return config
 
 
-def era5Scales(path):
+def era5Scales(path, basinATLAS):
     iterations = 0
     scales = {}
 
@@ -133,11 +133,15 @@ def era5Scales(path):
 
         iterations += len(df)
 
+        pfafID = os.path.basename(path).split(".")[0]
+        row = basinATLAS[basinATLAS["PFAF_ID"] == int(pfafID)]
+        area = row["SUB_AREA"]
+
         # I'm not actually sure this is perfectly correct
         # for actual variance, but it doesn't really matter as long as it's close
-        # TODO: WHY THE FUCK DID I LEAVE IT POTENTIALLY BROKEN
-        # TODO: Add basin area scaling
         for column in df.columns:
+            if "_sum" in column:
+                df[column] = df[column] / area
             if column not in scales:
                 mean = df[column].mean()
                 m2 = ((df[column] - mean) ** 2).sum()

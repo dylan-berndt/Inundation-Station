@@ -293,7 +293,6 @@ class InundationData(Dataset):
         self.riverContinuous = self.riverContinuous.dropna(axis=1)
         self.riverDiscrete = self.riverDiscrete.dropna(axis=1)
 
-        # TODO: Fix due to differing architectures 🎉🎉🎉🎉🎉
         # This stinks
         config.encoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
         config.decoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
@@ -301,8 +300,8 @@ class InundationData(Dataset):
         config.decoder.riverProjection.continuousDim = len(self.riverContinuous.columns)
 
         multiplier = 1
-        config.encoder.riverProjection.continuousDim += multiplier * config.encoder.block.gnn.hidden_channels
-        config.decoder.riverProjection.continuousDim += multiplier * config.decoder.block.gnn.hidden_channels
+        config.encoder.riverProjection.continuousDim += multiplier * config[config.appendDimensionPath]
+        config.decoder.riverProjection.continuousDim += multiplier * config[config.appendDimensionPath]
 
         # Like bad
         config.encoder.basinProjection.discreteRange = self.basinDiscreteColumnRanges
@@ -550,8 +549,10 @@ if __name__ == "__main__":
     if len(glob(os.path.join(config.path, "series", "ERA5_Parquet", "*.parquet"))) < 1:
         csvToParquet(os.path.join(config.path, "series", "ERA5"), os.path.join(config.path, "series", "ERA5_Parquet"))
 
+    basinATLAS = gpd.read_file(os.path.join(config.path, "BasinATLAS_v10_shp", "BasinATLAS_v10_lev07.shp"))
+
     if not os.path.exists("scales.json"):
-        era5Scales(os.path.join(config.path, "series", "ERA5_Parquet"))
+        era5Scales(os.path.join(config.path, "series", "ERA5_Parquet"), basinATLAS)
 
     dataset = InundationData(config)
     dataset.info()

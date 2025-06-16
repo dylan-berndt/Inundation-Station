@@ -5,6 +5,7 @@
     "dataSplit": 0.8,
     "history": 120,
     "future": 7,
+    "appendDimensionPath": "encoder.gnn.hidden_channels",
     "encoder": {
         "basinProjection": {
             "discreteDim": 4,
