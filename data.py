@@ -191,6 +191,9 @@ class InundationData(Dataset):
 
             print(f"\r{i}/{len(self.basinATLAS)} Basin Structures Appended to Graph", end="")
 
+
+        print()
+        print(f"Max Upstream Path: {nx.dag_longest_path_length(graph)}")
         print()
 
         self.upstreamBasins = {

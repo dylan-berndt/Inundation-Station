@@ -11,6 +11,75 @@ import torch_geometric.transforms as T
 from modules import *
 from utils import *
 
+# https://github.com/pyg-team/pytorch_geometric/blob/master/examples/graph_gps.py
+class RedrawProjection:
+    def __init__(self, model: torch.nn.Module,
+                 redraw_interval=None):
+        self.model = model
+        self.redraw_interval = redraw_interval
+        self.num_last_redraw = 0
+
+    def redraw_projections(self):
+        if not self.model.training or self.redraw_interval is None:
+            return
+        if self.num_last_redraw >= self.redraw_interval:
+            fast_attentions = [
+                module for module in self.model.modules()
+                if isinstance(module, PerformerAttention)
+            ]
+            for fast_attention in fast_attentions:
+                fast_attention.redraw_projection_matrix()
+            self.num_last_redraw = 0
+            return
+        self.num_last_redraw += 1
+
+
+class GPS(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        
+        self.nodeEmbedding = nn.Embedding()
+
+        self.convs = nn.ModuleList()
+        for _ in range(config.layers):
+            seq = nn.Sequential(
+                nn.Linear(config.channels, config.channels),
+                nn.ReLU(),
+                nn.Linear(config.channels, config.channels)
+            )
+            conv = GPSConv(config.channels, GINEConv(seq), heads=config.heads, attn_type="performer")
+            self.convs.append(conv)
+
+        self.redraw = RedrawProjection(self.convs, redraw_interval=1000)
+
+    def forward(self, inputs, edges, context=None):
+        for conv in self.convs:
+            inputs = conv(inputs, edges)
+
+        # TODO: Use global add pool on the fucking other models
+
+
+class InundationPerformerBlock(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.gps = None
+
+
+class InundationPerformerCoder(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        
+    def forward(self, inputs, context=None):
+        pass
+
+
+class InundationPerformerStation(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+
+    def forward(self, inputs):
+        pass
+
 
 class InundationGCLSTMBlock(nn.Module):
     def __init__(self, config: Config):
