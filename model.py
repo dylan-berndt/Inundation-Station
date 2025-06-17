@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import torch_geometric.nn as gnn
 import torch_geometric_temporal.nn as tgnn
 
-from torch_geometric.nn import GINEConv, GPSConv, global_add_pool
+from torch_geometric.nn import GINEConv, GPSConv, global_add_pool, global_mean_pool
 from torch_geometric.nn.attention import PerformerAttention
 import torch_geometric.transforms as T
 
@@ -121,8 +121,11 @@ class InundationGCLSTMCoder(nn.Module):
 
         convolved, newState = self.block(projected, inputs.edge_index, state)
 
-        batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)
-        sampledBasin = convolved[batchIndices, :, :]
+        # batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)
+        # sampledBasin = convolved[batchIndices, :, :]
+
+        # TODO: Give upstream nodes information about distance to target node?
+        sampledBasin = global_mean_pool(convolved, inputs.batch)
 
         riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
         riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
