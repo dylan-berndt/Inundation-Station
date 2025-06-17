@@ -349,13 +349,14 @@ class InundationData(Dataset):
             length = riverTime[-1] - riverTime[0]
             data = data[index: index + length, 1:]
 
+            area = self.basinContinuous.loc[int(basin)]["SUB_AREA"]
+
             # Hope that these are in order
             for k, key in enumerate(self.era5Scales.keys()):
-                scale = self.era5Scales[key][1]
-                # Area-weighted scaling :(
+                scale = 1
                 if "_sum" in key:
-                    scale += self.basinContinuous.loc[int(basin)]["SUB_AREA"]
-                data[:, k] = (data[:, k] - self.era5Scales[key][0]) / scale
+                    scale = area
+                data[:, k] = ((data[:, k] / scale) - self.era5Scales[key][0]) / self.era5Scales[key][1]
 
             data = torch.nan_to_num(data)
 
@@ -451,15 +452,25 @@ class InundationData(Dataset):
         if lat is None:
             sample = self[0] if sample is None else sample
             (past, future), targets = sample
+            grdcIDs = past.grdcID
+            if type(grdcIDs) != list:
+                grdcIDs = [grdcIDs]
         else:
-            pass
+            grdcIDs = []
 
-        rivers = self.riverSHP.loc[past.grdcID]
-        locations = gpd.GeoDataFrame(rivers[["lat", "lon"]], crs={"init": "EPSG:4326"}, geometry=gpd.points_from_xy(rivers.lon, rivers.lat))
+        rivers = self.riverSHP.loc[grdcIDs]
+        print(self.riverSHP.crs)
+        rivers = rivers.to_crs("EPSG:4326")
+        locations = gpd.GeoDataFrame(rivers[["lat", "lon"]], crs="EPSG:4326", geometry=gpd.points_from_xy(rivers.lon, rivers.lat))
 
-        # BasinATLAS for basin shapes
+        basinIDs = [[int(basinID) for basinID in self.upstreamBasins[self.translateDict[grdcID]]] for grdcID in grdcIDs]
+        basinIDs = set().union(*basinIDs)
+        basins = self.basinATLAS[self.basinATLAS.index.isin(list(basinIDs))]
+        basins = basins.to_crs("EPSG:4326")
+
         fig, ax = plt.subplots()
-        basins.plot(ax=ax, color='white', edgecolor='blue')
+        basins.plot(ax=ax, color='white', edgecolor='green')
+        rivers.plot(ax=ax, color='white', edgecolor='blue')
         locations.plot(ax=ax, marker='o', color='red', markersize=5)
         plt.show()
 
@@ -577,5 +588,5 @@ if __name__ == "__main__":
 
     newMadrid = 36.58144457928249, -89.53144490406078
 
-    dataset.display(lat=newMadrid[0], lon=newMadrid[1])
+    dataset.display()
 

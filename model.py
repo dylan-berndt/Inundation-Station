@@ -16,7 +16,7 @@ class InundationGCLSTMBlock(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
 
-        self.gclstm = tgnn.recurrent.GCLSTM(**config.gnn)
+        self.gclstm = tgnn.recurrent.GCLSTM(**config.gnn).to("cuda")
 
     def forward(self, inputs, edges, state=(None, None)):
         batch, sequence, _ = inputs.shape
@@ -24,7 +24,7 @@ class InundationGCLSTMBlock(nn.Module):
 
         outputs = []
         for t in range(sequence):
-            hidden, cell = self.gclstm(sequence[:, t], edges, hidden, cell)
+            hidden, cell = self.gclstm(inputs[:, t], edges, None, hidden, cell)
             outputs.append(hidden)
 
         series = torch.stack(outputs, dim=1)
@@ -43,7 +43,7 @@ class InundationGCLSTMCoder(nn.Module):
 
         self.head = CMAL(**config.head)
 
-    def forward(self, inputs, state=None):
+    def forward(self, inputs, state=(None, None)):
         inputShape = inputs.era5.shape
         basinContinuous = inputs.basinContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
         basinDiscrete = inputs.basinDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)

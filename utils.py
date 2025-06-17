@@ -14,13 +14,13 @@ class Config:
         return self._values.keys()
 
     def __getitem__(self, key):
+        if "." in key:
+            left, right = key.split(".")[0], ".".join(key.split(".")[1:])
+            return self[left][right]
+
         return self._values[key]
 
     def __getattr__(self, key):
-        if "." in key:
-            left, right = key.split(".")[0], ".".join(key.split(".")[1:])
-            return getattr(getattr(self, left), right)
-
         if key in self._values:
             return self._values[key]
 

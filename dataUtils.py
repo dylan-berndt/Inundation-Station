@@ -133,9 +133,11 @@ def era5Scales(path, basinATLAS):
 
         iterations += len(df)
 
-        pfafID = os.path.basename(path).split(".")[0]
+        pfafID = os.path.basename(filePath).split(".")[0].split("_")[-1]
         row = basinATLAS[basinATLAS["PFAF_ID"] == int(pfafID)]
-        area = row["SUB_AREA"]
+        area = row.iloc[0]["SUB_AREA"]
+        if area == 0:
+            print(pfafID)
 
         # I'm not actually sure this is perfectly correct
         # for actual variance, but it doesn't really matter as long as it's close

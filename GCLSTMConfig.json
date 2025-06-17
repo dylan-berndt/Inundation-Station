@@ -3,8 +3,9 @@
     "batchSize": 8,
     "nodesPerBatch": 2000,
     "dataSplit": 0.8,
-    "history": 120,
+    "history": 365,
     "future": 7,
+    "appendDimensionPath": "encoder.block.gnn.out_channels",
     "encoder": {
         "basinProjection": {
             "discreteDim": 4,
@@ -16,10 +17,12 @@
             "dropout": 0.2,
             "outputDim": 64
         },
-        "gnn": {
-            "in_channels": 64,
-            "out_channels": 64,
-            "K": 3
+        "block": {
+            "gnn": {
+                "in_channels": 64,
+                "out_channels": 64,
+                "K": 3
+            }
         },
         "head": {
             "inputDim": 64,
@@ -42,10 +45,12 @@
             "dropout": 0.2,
             "outputDim": 64
         },
-        "gnn": {
-            "in_channels": 64,
-            "out_channels": 64,
-            "K": 3
+        "block": {
+            "gnn": {
+                "in_channels": 64,
+                "out_channels": 64,
+                "K": 3
+            }
         },
         "head": {
             "inputDim": 64,
