@@ -36,6 +36,7 @@ def calculateReturnPeriods(df, periods=None, maximums=True):
     periods = [1, 2, 5, 10] if periods is None else periods
     df = df.copy()
     # Results in negative year values but still works ig
+    # TODO: Double check year calculations
     start = datetime(2000, 1, 1).timestamp()
     secondsInYear = 60 * 60 * 24 * 365
     df['year'] = df['YYYY-MM-DD'].apply(lambda x: (x - start) // secondsInYear).astype(int)
@@ -191,6 +192,8 @@ class InundationData(Dataset):
 
             print(f"\r{i}/{len(self.basinATLAS)} Basin Structures Appended to Graph", end="")
 
+        self.graph = graph
+
         # print()
         # print(f"Max Upstream Path: {nx.dag_longest_path_length(graph)}")
         print()
@@ -341,8 +344,6 @@ class InundationData(Dataset):
         thresholds = self.grdcDict[grdcID]["Thresholds"]
         thresholds = [(threshold - targetMean) / targetDev for threshold in thresholds]
 
-        deviation = self.grdcDict[grdcID]["Deviation"]
-
         basinERA5Data = []
         for b, basin in enumerate(upstreamBasins):
             data = self.pfafDict[basin]["Data"]
@@ -421,7 +422,8 @@ class InundationData(Dataset):
             dischargeHistory=dischargeHistory,
             dischargeFuture=dischargeFuture,
             thresholds=torch.tensor(thresholds, dtype=torch.float32),
-            deviation=torch.tensor(deviation, dtype=torch.float32)
+            mean=torch.tensor(targetMean, dtype=torch.float32),
+            deviation=torch.tensor(targetDev, dtype=torch.float32)
         )
 
         return (past, future), targets
@@ -472,7 +474,12 @@ class InundationData(Dataset):
         basins = self.basinATLAS[self.basinATLAS.index.isin(list(basinIDs))]
         basins = basins.to_crs("EPSG:3395")
 
+        allBasinIDs = [int(basinID) for basinID in self.graph.nodes]
+        allBasins = self.basinATLAS[self.basinATLAS.index.isin(allBasinIDs)]
+        allBasins = allBasins.to_crs("EPSG:3395")
+
         fig, ax = plt.subplots()
+        allBasins.plot(ax=ax, color="white", edgecolor="black")
         basins.plot(ax=ax, color='white', edgecolor='green')
         rivers.plot(ax=ax, color='white', edgecolor='blue')
         locations.plot(ax=ax, marker='o', color='red', markersize=5)
@@ -523,6 +530,7 @@ class GraphSizeSampler(Sampler):
             batchSizes = [batchSizes[i] for i in range(len(batchSizes)) if len(self.batches[i]) == batchSize]
             self.batches = [batch for batch in self.batches if len(batch) == batchSize]
 
+        plt.figure(figsize=(40, 12))
         plt.subplot(1, 3, 1)
         plt.title("Node Count Distribution per Sample")
         plt.hist(sizes)
