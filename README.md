@@ -9,7 +9,7 @@ Future work would see aggregation over level 12 geometries for maximum granulari
 
 ## Getting Started
 
-### Download ERA5 data
+### 1. Download ERA5 data
 Run Basin_Export.ipynb in a Google Colab environment to export ERA5 data for individual basins. 
 
 Make sure to either create a "Basin Differentiation" folder in your Google Drive or change the folder name. Also make sure to sign up for Google Earth Engine, then create a project and change the project name in Basin_Export to the name of your project. This process will take a while, and Google offers a [Task Manager](https://code.earthengine.google.com/tasks) to track queued tasks.
@@ -27,13 +27,13 @@ basinType = type(basinIDs[0])
 
 Current code specifies HydroSHEDS level 7 geometries, and the regions North America (7) and Arctic (8)
 
-### Download BasinATLAS and RiverATLAS data
+### 2. Download BasinATLAS and RiverATLAS data
 Download both the BasinATLAS and RiverATLAS datasets from the [HydroATLAS](https://www.hydrosheds.org/hydroatlas) compiled dataset
 
-### Download GRDC data
+### 3. Download GRDC data
 Download series of GRDC data for region of study from the [GRDC Official Site](https://portal.grdc.bafg.de/applications/public.html?publicuser=PublicUser#dataDownload/Stations)
 
-### Data folder structure
+### 4. Import and structure data
 The dataset expects certain features to be in specific folders in the data folder. To start, create the data folder (or edit config file to use a different folder). Unzip the BasinATLAS and RiverATLAS data folders directly into data. Next, create a folder named series inside of data that contains both ERA5 and GRDC folders. Place the exported ERA5 .csv files in the ERA5 folder, and do the same with the GRDC .txt files in their folder. Last, the joined folder. This will be populated by data.py.
 
 The final folder structure should look something like this:
@@ -57,13 +57,13 @@ The final folder structure should look something like this:
 └── README.md
 ```
 
-### Install package requirements
+### 5. Install package requirements
 `` python -m pip install -r requirements.txt  ``
 
-### Run data.py
+### 6. Run data.py
 This will precompute joins on GRDC, ERA5, and HydroATLAS data; as well as compute scaling factors for model inputs. 
 
-### Run train.ipynb or trainHub.ipynb
+### 7. Run train.ipynb or trainHub.ipynb
 Begins training. Either trains a custom graph model or Google's FloodHub model. Pause training at any point to begin the evaluation portion of the notebook.
 
 ## Model
