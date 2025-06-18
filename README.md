@@ -67,7 +67,12 @@ The final folder structure should look something like this:
 ### 6. Run data.py
 This will precompute joins on GRDC, ERA5, and HydroATLAS data; as well as compute scaling factors for model inputs. 
 
-### 7. Run train.ipynb or trainHub.ipynb
+### 7. Run vis.py
+You can choose to either run this script or disable the visualizer in the training notebook. 
+
+Running the script creates a visualizer for model metrics such as loss, recall, and NSE. This could technically be run on another device if client is updated in the training notebook to connect to the machine.
+
+### 8. Run train.ipynb or trainHub.ipynb
 Begins training. Either trains a custom graph model or Google's FloodHub model. Pause training at any point to begin the evaluation portion of the notebook.
 
 ## Model
