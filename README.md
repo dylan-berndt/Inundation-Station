@@ -1,4 +1,5 @@
-# Inundation Station
+![Logo](https://github.com/user-attachments/assets/d3191cfc-847f-465d-ac50-51b3b68a08c6)
+
 
 Global flood prediction model based on Google's Flood Hub and several spatio-temporal graph architectures. Uses a graph neural network on upstream basins to prevent information loss due to area-weighted averaging over large upstream basin geometries. 
 
