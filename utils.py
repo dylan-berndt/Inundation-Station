@@ -119,9 +119,6 @@ class CMALPrecision(nn.Module):
     def forward(self, yPred, yTrue, thresholds, *args, **kwargs):
         self.batches.append((yPred, yTrue, thresholds))
 
-        if len(self.batches) < self.numBatches:
-            return 0
-
         if len(self.batches) > self.numBatches:
             self.batches = self.batches[1:]
 
@@ -158,9 +155,6 @@ class CMALRecall(nn.Module):
 
     def forward(self, yPred, yTrue, thresholds, *args, **kwargs):
         self.batches.append((yPred, yTrue, thresholds))
-
-        if len(self.batches) < self.numBatches:
-            return 0
 
         if len(self.batches) > self.numBatches:
             self.batches = self.batches[1:]

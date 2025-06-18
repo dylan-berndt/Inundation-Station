@@ -4,12 +4,14 @@ import matplotlib.pyplot as plt
 import torch_geometric.nn as gnn
 import torch_geometric_temporal.nn as tgnn
 
-from torch_geometric.nn import GINEConv, GPSConv, global_add_pool, global_mean_pool
+from torch_geometric.nn import GINEConv, GPSConv, global_add_pool, global_mean_pool, global_max_pool
+from torch_geometric.utils import scatter
 from torch_geometric.nn.attention import PerformerAttention
 import torch_geometric.transforms as T
 
 from modules import *
 from utils import *
+
 
 # https://github.com/pyg-team/pytorch_geometric/blob/master/examples/graph_gps.py
 class RedrawProjection:
@@ -125,7 +127,8 @@ class InundationGCLSTMCoder(nn.Module):
         # sampledBasin = convolved[batchIndices, :, :]
 
         # TODO: Give upstream nodes information about distance to target node?
-        sampledBasin = global_mean_pool(convolved, inputs.batch)
+        # why is this not the default global_max_pool
+        sampledBasin = scatter(convolved, inputs.batch, dim=0, reduce='max')
 
         riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
         riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)

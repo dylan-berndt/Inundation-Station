@@ -191,9 +191,8 @@ class InundationData(Dataset):
 
             print(f"\r{i}/{len(self.basinATLAS)} Basin Structures Appended to Graph", end="")
 
-
-        print()
-        print(f"Max Upstream Path: {nx.dag_longest_path_length(graph)}")
+        # print()
+        # print(f"Max Upstream Path: {nx.dag_longest_path_length(graph)}")
         print()
 
         self.upstreamBasins = {
@@ -463,13 +462,15 @@ class InundationData(Dataset):
 
         rivers = self.riverSHP.loc[grdcIDs]
         print(self.riverSHP.crs)
-        rivers = rivers.to_crs("EPSG:4326")
+        # Mercator
+        rivers = rivers.to_crs("EPSG:3395")
         locations = gpd.GeoDataFrame(rivers[["lat", "lon"]], crs="EPSG:4326", geometry=gpd.points_from_xy(rivers.lon, rivers.lat))
+        locations = locations.to_crs("EPSG:3395")
 
         basinIDs = [[int(basinID) for basinID in self.upstreamBasins[self.translateDict[grdcID]]] for grdcID in grdcIDs]
         basinIDs = set().union(*basinIDs)
         basins = self.basinATLAS[self.basinATLAS.index.isin(list(basinIDs))]
-        basins = basins.to_crs("EPSG:4326")
+        basins = basins.to_crs("EPSG:3395")
 
         fig, ax = plt.subplots()
         basins.plot(ax=ax, color='white', edgecolor='green')
