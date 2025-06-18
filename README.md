@@ -1,6 +1,6 @@
 # Inundation Station
 
-Global flood prediction model based on Google's Flood Hub and the MTGNN architectures. Uses a graph neural network on upstream basins to prevent information loss due to area-weighted averaging over large upstream basin geometries. 
+Global flood prediction model based on Google's Flood Hub and several spatio-temporal graph architectures. Uses a graph neural network on upstream basins to prevent information loss due to area-weighted averaging over large upstream basin geometries. 
 
 Operates on ERA5-Land data aggregated over HydroATLAS Level 7 basin geometries, predicting GRDC flow data for North America.
 
