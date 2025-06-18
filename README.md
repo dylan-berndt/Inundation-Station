@@ -34,7 +34,11 @@ Download both the BasinATLAS and RiverATLAS datasets from the [HydroATLAS](https
 Download series of GRDC data for region of study from the [GRDC Official Site](https://portal.grdc.bafg.de/applications/public.html?publicuser=PublicUser#dataDownload/Stations)
 
 ### 4. Import and structure data
-The dataset expects certain features to be in specific folders in the data folder. To start, create the data folder (or edit config file to use a different folder). Unzip the BasinATLAS and RiverATLAS data folders directly into data. Next, create a folder named series inside of data that contains both ERA5 and GRDC folders. Place the exported ERA5 .csv files in the ERA5 folder, and do the same with the GRDC .txt files in their folder. Last, the joined folder. This will be populated by data.py.
+The dataset expects certain features to be in specific folders in the data folder. To start, create the data folder (or edit config file to use a different folder). 
+
+Unzip the BasinATLAS and RiverATLAS data folders directly into data. Next, create a folder named series inside of data that contains both ERA5 and GRDC folders. Place the exported ERA5 .csv files in the ERA5 folder, and do the same with the GRDC .txt files in their folder. 
+
+Last, create a folder named joined in data. This will be populated by data.py.
 
 The final folder structure should look something like this:
 ```
