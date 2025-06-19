@@ -3,6 +3,8 @@ import json
 import torch
 import torch.nn as nn
 
+from scipy.stats import pearsonr
+
 import math
 
 
@@ -180,6 +182,47 @@ class CMALRecall(nn.Module):
         value = tp / (tp + fn + 1e-8)
         value = torch.nan_to_num(value, 0, 0, 0)
         return value.item()
+    
+
+class CMALNSE(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, yPred, yTrue, means, *args, **kwargs):
+        yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
+
+        numerator = torch.sum(torch.pow(yTrue - yPred, 2))
+        denominator = torch.sum(torch.pow(yTrue - means, 2))
+
+        value = 1 - (numerator / denominator)
+        value = torch.nan_to_num(value, 0, 0, 0)
+        return value.item()
+    
+
+class CMALKGE(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, yPred, yTrue, means, *args, **kwargs):
+        yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
+
+        r, _ = pearsonr(yPred.values, yTrue.values)
+
+        beta = torch.mean(yPred) / torch.mean(yTrue)
+        alpha = torch.std(yPred) / torch.std(yTrue)
+
+        value = 1 - torch.sqrt(torch.pow(r - 1, 2) + torch.pow(alpha - 1, 2) + torch.pow(beta - 1, 2))
+        value = torch.nan_to_num(value, 0, 0, 0)
+        return value.item()
+    
+
+class CMALUncertainty(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, yPred, *args, **kwargs):
+        yPred = torch.sum(yPred[1] * yPred[3], dim=-1)
+        return torch.mean(yPred).item()
 
 
 def sampleCMAL(yPred, numSamples):
