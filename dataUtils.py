@@ -34,6 +34,7 @@ def getGRDCDataframe(path):
     return grdcDF
 
 
+# TODO: Rework to join multiple regions of RiverATLAS
 def joinGRDCRiverATLAS(path, location="NA"):
     grdcDF = getGRDCDataframe(path)
 

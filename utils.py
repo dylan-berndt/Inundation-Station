@@ -188,14 +188,14 @@ class CMALNSE(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, yPred, yTrue, deviations, *args, **kwargs):
+    def forward(self, yPred, yTrue, means, deviations, *args, **kwargs):
         yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
 
         yPred = yPred * deviations
         yTrue = yTrue * deviations
 
         numerator = torch.sum(torch.pow(yTrue - yPred, 2))
-        denominator = torch.sum(torch.pow(yTrue - torch.mean(yTrue), 2))
+        denominator = torch.sum(torch.pow(yTrue - means, 2))
 
         value = 1 - (numerator / denominator)
         value = torch.nan_to_num(value, 0, 0, 0)
