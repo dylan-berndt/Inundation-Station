@@ -78,7 +78,8 @@ Begins training. Either trains a custom graph model or Google's FloodHub model. 
 
 ## Model
 
-![Inundation Station(7)](https://github.com/user-attachments/assets/6d46f2fa-cc06-456b-a0f9-baa51e5e9712)
+![Inundation Station drawio](https://github.com/user-attachments/assets/c6776de7-41c3-4c86-a4e7-d0f670d19d3b)
+
 
 
 
