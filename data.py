@@ -474,7 +474,7 @@ class InundationData(Dataset):
         basins = self.basinATLAS[self.basinATLAS.index.isin(list(basinIDs))]
         basins = basins.to_crs("EPSG:3395")
 
-        allBasinIDs = [int(basinID) for basinID in self.graph.nodes]
+        allBasinIDs = [int(basinID) for basinID in list(self.pfafDict.keys())]
         allBasins = self.basinATLAS[self.basinATLAS.index.isin(allBasinIDs)]
         allBasins = allBasins.to_crs("EPSG:3395")
 
