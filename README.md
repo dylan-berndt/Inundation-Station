@@ -63,7 +63,7 @@ The final folder structure should look something like this:
 ```
 
 ### 5. Install package requirements
-`` python -m pip install -r requirements.txt  ``
+``python -m pip install -r requirements.txt``
 
 ### 6. Run data.py
 This will precompute joins on GRDC, ERA5, and HydroATLAS data; as well as compute scaling factors for model inputs. 

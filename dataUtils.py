@@ -18,7 +18,7 @@ def getGRDCDataframe(path):
         fileName = os.path.basename(filePath)
         riverID = fileName.split("_")[0]
 
-        lat, lon = None, None
+        lat, lon, area = None, None, None
         for line in file.readlines():
             if "# DATA" in line:
                 break
@@ -27,14 +27,17 @@ def getGRDCDataframe(path):
                 lat = line.split()[3]
             if "# Longitude" in line:
                 lon = line.split()[3]
+            if "# Catchment" in line:
+                area = line.split()[4]
 
-        newDF = pd.DataFrame([[riverID, lat, lon]], columns=grdcDF.columns)
+        newDF = pd.DataFrame([[riverID, lat, lon, area]], columns=grdcDF.columns)
         grdcDF = pd.concat([newDF, grdcDF], ignore_index=True)
 
     return grdcDF
 
 
 # TODO: Rework to join multiple regions of RiverATLAS
+# TODO: Double check that streams are related to RiverATLAS with areas
 def joinGRDCRiverATLAS(path, location="NA"):
     grdcDF = getGRDCDataframe(path)
 
@@ -47,6 +50,9 @@ def joinGRDCRiverATLAS(path, location="NA"):
     joined = gpd.sjoin_nearest(grdcGDF, riverSHP, how="left", distance_col="river_dist")
     joined = joined.sort_values("river_dist").drop_duplicates("id")
     joined.set_index("id")
+
+    # joined["percentDiff"] = (joined["UPLAND_SKM"] - joined["area"]) / (joined["UPLAND_SKM"] + joined["area"])
+
     joinedDFPath = os.path.join(path, "joined", f"RiverATLAS_{location}_Joined.shp")
 
     joined.to_file(joinedDFPath)
