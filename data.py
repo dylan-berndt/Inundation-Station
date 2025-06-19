@@ -464,19 +464,20 @@ class InundationData(Dataset):
 
         rivers = self.riverSHP.loc[grdcIDs]
         print(self.riverSHP.crs)
-        # Mercator
-        rivers = rivers.to_crs("EPSG:3395")
+        # Mercator: 3395
+        # Lat/Lon: 3174
+        rivers = rivers.to_crs("EPSG:3174")
         locations = gpd.GeoDataFrame(rivers[["lat", "lon"]], crs="EPSG:4326", geometry=gpd.points_from_xy(rivers.lon, rivers.lat))
-        locations = locations.to_crs("EPSG:3395")
+        locations = locations.to_crs("EPSG:3174")
 
         basinIDs = [[int(basinID) for basinID in self.upstreamBasins[self.translateDict[grdcID]]] for grdcID in grdcIDs]
         basinIDs = set().union(*basinIDs)
         basins = self.basinATLAS[self.basinATLAS.index.isin(list(basinIDs))]
-        basins = basins.to_crs("EPSG:3395")
+        basins = basins.to_crs("EPSG:3174")
 
         allBasinIDs = [int(basinID) for basinID in list(self.pfafDict.keys())]
         allBasins = self.basinATLAS[self.basinATLAS.index.isin(allBasinIDs)]
-        allBasins = allBasins.to_crs("EPSG:3395")
+        allBasins = allBasins.to_crs("EPSG:3174")
 
         fig, ax = plt.subplots()
         allBasins.plot(ax=ax, color="white", edgecolor="black")
