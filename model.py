@@ -85,6 +85,13 @@ class InundationGCLSTMBlock(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
 
+        self.fc = nn.Sequential(
+            nn.Linear(config.gnn.in_channels, config.gnn.in_channels),
+            nn.ReLU(),
+            nn.Linear(config.gnn.in_channels, config.gnn.in_channels),
+            nn.Dropout(config.dropout)
+        )
+
         self.gclstm = tgnn.recurrent.GCLSTM(**config.gnn).to("cuda")
         self.ln = nn.LayerNorm(config.gnn.out_channels)
 
@@ -95,6 +102,8 @@ class InundationGCLSTMBlock(nn.Module):
         self.cellBridge = nn.Linear(**config.bridge)
 
     def forward(self, inputs, edges, state=(None, None)):
+        inputs = self.fc(inputs)
+
         batch, sequence, _ = inputs.shape
         hidden, cell = state
 
