@@ -7,6 +7,8 @@ import os
 import json
 import math
 
+import numpy as np
+
 
 def getGRDCDataframe(path):
     folderGRDC = os.path.join(path, "series", "GRDC", "*.txt")
@@ -149,6 +151,8 @@ def era5Scales(path, basinATLAS):
         # I'm not actually sure this is perfectly correct
         # for actual variance, but it doesn't really matter as long as it's close
         for column in df.columns:
+            if column in ["total_precipitation_sum", "snowfall_sum", "surface_net_solar_radiation_sum"]:
+                df[column] = np.log10(df[column])
             if "_sum" in column:
                 df[column] = df[column] / area
             if column not in scales:

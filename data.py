@@ -166,6 +166,8 @@ class InundationData(Dataset):
             basinData = basinData.groupby(level=0).first()
 
             for column in basinData.columns:
+                if column in ["total_precipitation_sum", "snowfall_sum", "surface_net_solar_radiation_sum"]:
+                    basinData[column] = np.log10(basinData[column])
                 if column == "date":
                     continue
                 mean, std = self.era5Scales[column]
@@ -173,9 +175,7 @@ class InundationData(Dataset):
                 if "_sum" in column:
                     scale = area
 
-                basinData[column] /= scale
-                basinData[column] -= mean
-                basinData[column] /= std
+                basinData[column] = ((basinData[column] / scale) - mean) / std
 
             basinData = basinData.to_numpy()
 
