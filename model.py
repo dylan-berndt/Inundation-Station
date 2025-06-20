@@ -58,8 +58,6 @@ class GPS(nn.Module):
         for conv in self.convs:
             inputs = conv(inputs, edges)
 
-        # TODO: Use global add pool on the fucking other models
-
 
 class InundationPerformerBlock(nn.Module):
     def __init__(self, config: Config):
@@ -90,6 +88,12 @@ class InundationGCLSTMBlock(nn.Module):
         self.gclstm = tgnn.recurrent.GCLSTM(**config.gnn).to("cuda")
         self.ln = nn.LayerNorm(config.gnn.out_channels)
 
+        self.hiddenBridge = nn.Sequential(
+            nn.Linear(**config.bridge),
+            nn.Tanh()
+        )
+        self.cellBridge = nn.Linear(**config.bridge)
+
     def forward(self, inputs, edges, state=(None, None)):
         batch, sequence, _ = inputs.shape
         hidden, cell = state
@@ -100,6 +104,8 @@ class InundationGCLSTMBlock(nn.Module):
             outputs.append(hidden)
 
         series = self.ln(torch.stack(outputs, dim=1))
+        hidden, cell = self.hiddenBridge(hidden), self.cellBridge(cell)
+
         return series, (hidden, cell)
 
 
@@ -123,7 +129,7 @@ class InundationGCLSTMCoder(nn.Module):
         projected = self.basinProjection(basinProjected, basinDiscrete)
 
         for i in range(len(self.blocks)):
-            convolved, newState = self.blocks[i](projected, inputs.edge_index, state)
+            convolved, state = self.blocks[i](projected, inputs.edge_index, state)
             projected = projected + convolved
         # convolved, newState = self.block(projected, inputs.edge_index, state)
 
@@ -131,8 +137,7 @@ class InundationGCLSTMCoder(nn.Module):
         # sampledBasin = convolved[batchIndices, :, :]
 
         # TODO: Give upstream nodes information about distance to target node?
-        # why is this not the default global_max_pool
-        sampledBasin = scatter(projected, inputs.batch, dim=0, reduce='mean')
+        sampledBasin = scatter(projected, inputs.batch, dim=0, reduce='max')
 
         riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
         riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
@@ -141,7 +146,7 @@ class InundationGCLSTMCoder(nn.Module):
 
         cast = self.head(series)
 
-        return cast, newState
+        return cast, state
 
 
 class InundationGCLSTMStation(nn.Module):
@@ -149,20 +154,12 @@ class InundationGCLSTMStation(nn.Module):
         super().__init__()
         self.encoder = InundationGCLSTMCoder(config.encoder)
 
-        self.hiddenBridge = nn.Sequential(
-            nn.Linear(**config.bridge),
-            nn.Tanh()
-        )
-        self.cellBridge = nn.Linear(**config.bridge)
-
         self.decoder = InundationGCLSTMCoder(config.decoder)
 
     def forward(self, inputs):
         past, future = inputs
 
         hindcast, (hidden, cell) = self.encoder(past)
-        hidden = self.hiddenBridge(hidden)
-        cell = self.cellBridge(cell)
         forecast, _ = self.decoder(future, (hidden, cell))
 
         return hindcast, forecast
@@ -442,8 +439,6 @@ class FloodCoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        # Can't include basin discrete due to how the hell would I do that
-        # I have an idea but like come on [sum(basinArea * embeddingVector per basin) / sum(totalBasinArea)]
         self.basinProjection = SingleProjection(config.basinProjection)
         self.riverProjection = DualProjection(config.riverProjection)
 

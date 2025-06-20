@@ -22,6 +22,10 @@
                 "in_channels": 64,
                 "out_channels": 64,
                 "K": 4
+            },
+            "bridge": {
+                "in_features": 64,
+                "out_features": 64
             }
         },
         "blocks": 3,
@@ -30,10 +34,6 @@
             "hiddenDim": 64,
             "mixtures": 1
         }
-    },
-    "bridge": {
-        "in_features": 64,
-        "out_features": 64
     },
     "decoder": {
         "basinProjection": {
@@ -51,6 +51,10 @@
                 "in_channels": 64,
                 "out_channels": 64,
                 "K": 4
+            },
+            "bridge": {
+                "in_features": 64,
+                "out_features": 64
             }
         },
         "blocks": 3,

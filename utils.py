@@ -74,7 +74,6 @@ class Config:
             return data
 
 
-# TODO: Determine effect of shape on loss (larger time ranges have larger loss?) (this was written by google engineers?)
 class CMALLoss(nn.Module):
     def __init__(self):
         super().__init__()
@@ -220,7 +219,7 @@ class CMALKGE(nn.Module):
     def forward(self, yPred, yTrue, means, *args, **kwargs):
         yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
 
-        r, _ = pearsonr(yPred.values(), yTrue.values())
+        r, _ = pearsonr(yPred.flatten().cpu().numpy(), yTrue.flatten().cpu().numpy())
 
         beta = torch.mean(yPred) / torch.mean(yTrue)
         alpha = torch.std(yPred) / torch.std(yTrue)
