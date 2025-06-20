@@ -64,7 +64,6 @@ def defaultNoise(minNoise, maxNoise):
     return noiseData
 
 
-# TODO: Find the goddamned nans
 class InundationData(Dataset):
     def __init__(self, config, location="NA", noise=defaultNoise(0.5, 0.7)):
         self.config = config
@@ -164,10 +163,7 @@ class InundationData(Dataset):
 
             basinData = pd.read_parquet(filePath)
             area = basinArea.loc[int(pfafID)]["SUB_AREA"]
-            # print(area)
             basinData = basinData.groupby(level=0).first()
-            # print(basinData.index.is_unique)
-            # print(basinData.columns.is_unique)
 
             for column in basinData.columns:
                 if column == "date":
@@ -216,8 +212,6 @@ class InundationData(Dataset):
 
         self.graph = graph
 
-        # print()
-        # print(f"Max Upstream Path: {nx.dag_longest_path_length(graph)}")
         print()
 
         self.upstreamBasins = {
@@ -261,6 +255,10 @@ class InundationData(Dataset):
         self.offsetMap = []
         self.graphSizes = []
         for key in self.grdcDict:
+            upstreamBasins = nx.ancestors(graph, self.translateDict[key])
+            areas = [basinArea.loc(int(basinID))["SUB_AREA"] for basinID in upstreamBasins]
+            self.grdcDict[key]["Area"] = sum(areas)
+
             timeSeries = self.grdcDict[key]["Time"]
 
             seriesLength = timeSeries[-1] - timeSeries[0]
@@ -325,12 +323,8 @@ class InundationData(Dataset):
         # This stinks
         config.encoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
         config.decoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
-        config.encoder.riverProjection.continuousDim = len(self.riverContinuous.columns)
-        config.decoder.riverProjection.continuousDim = len(self.riverContinuous.columns)
-
-        multiplier = 1
-        config.encoder.riverProjection.continuousDim += multiplier * config[config.appendDimensionPath]
-        config.decoder.riverProjection.continuousDim += multiplier * config[config.appendDimensionPath]
+        config.encoder.riverProjection.continuousDim = len(self.riverContinuous.columns) + config[config.appendDimensionPath]
+        config.decoder.riverProjection.continuousDim = len(self.riverContinuous.columns) + config[config.appendDimensionPath]
 
         # Like bad
         config.encoder.basinProjection.discreteRange = self.basinDiscreteColumnRanges
@@ -357,14 +351,21 @@ class InundationData(Dataset):
 
         targetMean, targetDev = self.grdcDict[grdcID]["Mean"], self.grdcDict[grdcID]["Deviation"]
 
-        dischargeHistory = riverStage[offset: offset + self.config.history]
-        dischargeHistory = (dischargeHistory - targetMean) / targetDev
+        # dischargeHistory = riverStage[offset: offset + self.config.history]
+        # dischargeHistory = (dischargeHistory - targetMean) / targetDev
 
-        dischargeFuture = riverStage[offset + self.config.history: offset + self.config.history + self.config.future]
-        dischargeFuture = (dischargeFuture - targetMean) / targetDev
+        # dischargeFuture = riverStage[offset + self.config.history: offset + self.config.history + self.config.future]
+        # dischargeFuture = (dischargeFuture - targetMean) / targetDev
 
+        # thresholds = self.grdcDict[grdcID]["Thresholds"]
+        # thresholds = [(threshold - targetMean) / targetDev for threshold in thresholds]
+
+        targetScale = self.grdcDict[grdcID]["Area"]
+
+        dischargeHistory = riverStage[offset: offset + self.config.history] / targetScale
+        dischargeFuture = riverStage[offset + self.config.history: offset + self.config.history + self.config.future] / targetScale
         thresholds = self.grdcDict[grdcID]["Thresholds"]
-        thresholds = [(threshold - targetMean) / targetDev for threshold in thresholds]
+        thresholds = [threshold / targetScale for threshold in thresholds]
 
         basinERA5Data = []
         for b, basin in enumerate(upstreamBasins):
@@ -373,15 +374,6 @@ class InundationData(Dataset):
             index = riverTime[0] - first
             length = riverTime[-1] - riverTime[0]
             data = data[index: index + length, 1:]
-
-            # area = self.basinContinuous.loc[int(basin)]["SUB_AREA"]
-
-            # # Hope that these are in order
-            # for k, key in enumerate(self.era5Scales.keys()):
-            #     scale = 1
-            #     if "_sum" in key:
-            #         scale = area
-            #     data[:, k] = ((data[:, k] / scale) - self.era5Scales[key][0]) / self.era5Scales[key][1]
 
             data = torch.nan_to_num(data)
 
