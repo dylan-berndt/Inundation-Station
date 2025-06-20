@@ -65,7 +65,11 @@ class DualProjection(nn.Module):
         self.encodingDim = config.discreteDim * len(config.discreteRange) + config.continuousDim
 
         self.dropout = nn.Dropout(config.dropout)
-        self.fc = nn.Linear(self.encodingDim, config.outputDim)
+        self.fc = nn.Sequential(
+            nn.Linear(self.encodingDim, config.outputDim),
+            nn.ReLU(),
+            nn.Linear(config.outputDim, config.outputDim)
+        )
 
     def forward(self, c, d):
         embeddings = [emb(d[:, :, i]) for i, emb in enumerate(self.embeddings)]

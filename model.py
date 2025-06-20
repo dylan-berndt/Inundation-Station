@@ -88,6 +88,7 @@ class InundationGCLSTMBlock(nn.Module):
         super().__init__()
 
         self.gclstm = tgnn.recurrent.GCLSTM(**config.gnn).to("cuda")
+        self.ln = nn.LayerNorm(config.gnn.out_channels)
 
     def forward(self, inputs, edges, state=(None, None)):
         batch, sequence, _ = inputs.shape
@@ -98,7 +99,7 @@ class InundationGCLSTMBlock(nn.Module):
             hidden, cell = self.gclstm(inputs[:, t], edges, None, hidden, cell)
             outputs.append(hidden)
 
-        series = torch.stack(outputs, dim=1)
+        series = self.ln(torch.stack(outputs, dim=1))
         return series, (hidden, cell)
 
 
@@ -110,7 +111,7 @@ class InundationGCLSTMCoder(nn.Module):
         self.basinProjection = DualProjection(config.basinProjection)
         self.riverProjection = DualProjection(config.riverProjection)
 
-        self.block = InundationGCLSTMBlock(config.block)
+        self.blocks = nn.ModuleList([InundationGCLSTMBlock(config.block) for _ in range(config.blocks)])
 
         self.head = CMAL(**config.head)
 
@@ -121,14 +122,17 @@ class InundationGCLSTMCoder(nn.Module):
         basinProjected = torch.concatenate([inputs.era5, basinContinuous], dim=-1)
         projected = self.basinProjection(basinProjected, basinDiscrete)
 
-        convolved, newState = self.block(projected, inputs.edge_index, state)
+        for i in range(len(self.blocks)):
+            convolved, newState = self.blocks[i](projected, inputs.edge_index, state)
+            projected = projected + convolved
+        # convolved, newState = self.block(projected, inputs.edge_index, state)
 
         # batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)
         # sampledBasin = convolved[batchIndices, :, :]
 
         # TODO: Give upstream nodes information about distance to target node?
         # why is this not the default global_max_pool
-        sampledBasin = scatter(convolved, inputs.batch, dim=0, reduce='max')
+        sampledBasin = scatter(projected, inputs.batch, dim=0, reduce='mean')
 
         riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
         riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)

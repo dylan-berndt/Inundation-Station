@@ -10,52 +10,54 @@
         "basinProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 64
         },
         "riverProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 64
         },
         "block": {
             "gnn": {
-                "in_channels": 128,
-                "out_channels": 128,
+                "in_channels": 64,
+                "out_channels": 64,
                 "K": 4
             }
         },
+        "blocks": 3,
         "head": {
-            "inputDim": 128,
-            "hiddenDim": 256,
-            "mixtures": 12
+            "inputDim": 64,
+            "hiddenDim": 64,
+            "mixtures": 1
         }
     },
     "bridge": {
-        "in_features": 128,
-        "out_features": 128
+        "in_features": 64,
+        "out_features": 64
     },
     "decoder": {
         "basinProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 64
         },
         "riverProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 64
         },
         "block": {
             "gnn": {
-                "in_channels": 128,
-                "out_channels": 128,
+                "in_channels": 64,
+                "out_channels": 64,
                 "K": 4
             }
         },
+        "blocks": 3,
         "head": {
-            "inputDim": 128,
-            "hiddenDim": 256,
-            "mixtures": 12
+            "inputDim": 64,
+            "hiddenDim": 64,
+            "mixtures": 1
         }
     },
     "variables": {

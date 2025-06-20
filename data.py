@@ -146,6 +146,13 @@ class InundationData(Dataset):
 
         print()
 
+        with open("scales.json", "r") as file:
+            self.era5Scales = json.load(file)
+
+        self.basinATLAS = gpd.read_file(os.path.join(config.path, "BasinATLAS_v10_shp", "BasinATLAS_v10_lev07.shp"))
+        # Why in the name of our lord are there duplicate Pfafstetter IDs in the BasinATLAS data. What
+        basinArea = self.basinATLAS.copy().set_index("PFAF_ID").groupby(level=0).first()
+
         sumLakes = 0
         era5Paths = glob(os.path.join(config.path, "series", "ERA5_Parquet", "*.parquet"))
         for f, filePath in enumerate(era5Paths):
@@ -155,7 +162,27 @@ class InundationData(Dataset):
                 pfafDict[pfafID] = {}
             pfafDict[pfafID]["Parquet_Path"] = filePath
 
-            basinData = pd.read_parquet(filePath).to_numpy()
+            basinData = pd.read_parquet(filePath)
+            area = basinArea.loc[int(pfafID)]["SUB_AREA"]
+            # print(area)
+            basinData = basinData.groupby(level=0).first()
+            # print(basinData.index.is_unique)
+            # print(basinData.columns.is_unique)
+
+            for column in basinData.columns:
+                if column == "date":
+                    continue
+                mean, std = self.era5Scales[column]
+                scale = 1
+                if "_sum" in column:
+                    scale = area
+
+                basinData[column] /= scale
+                basinData[column] -= mean
+                basinData[column] /= std
+
+            basinData = basinData.to_numpy()
+
             if basinData.shape[1] == 1:
                 start = datetime(1980, 1, 1).timestamp() // 86400
                 end = datetime(2023, 1, 1).timestamp() // 86400
@@ -168,11 +195,6 @@ class InundationData(Dataset):
             print(f"\r{f + 1}/{len(era5Paths)} ERA5 files loaded", end="")
 
         print(f"\nTotal empty basins: {sumLakes}")
-
-        with open("scales.json", "r") as file:
-            self.era5Scales = json.load(file)
-
-        self.basinATLAS = gpd.read_file(os.path.join(config.path, "BasinATLAS_v10_shp", "BasinATLAS_v10_lev07.shp"))
 
         self.grdcDict = grdcDict
         self.pfafDict = pfafDict
@@ -352,14 +374,14 @@ class InundationData(Dataset):
             length = riverTime[-1] - riverTime[0]
             data = data[index: index + length, 1:]
 
-            area = self.basinContinuous.loc[int(basin)]["SUB_AREA"]
+            # area = self.basinContinuous.loc[int(basin)]["SUB_AREA"]
 
-            # Hope that these are in order
-            for k, key in enumerate(self.era5Scales.keys()):
-                scale = 1
-                if "_sum" in key:
-                    scale = area
-                data[:, k] = ((data[:, k] / scale) - self.era5Scales[key][0]) / self.era5Scales[key][1]
+            # # Hope that these are in order
+            # for k, key in enumerate(self.era5Scales.keys()):
+            #     scale = 1
+            #     if "_sum" in key:
+            #         scale = area
+            #     data[:, k] = ((data[:, k] / scale) - self.era5Scales[key][0]) / self.era5Scales[key][1]
 
             data = torch.nan_to_num(data)
 
@@ -463,7 +485,6 @@ class InundationData(Dataset):
             grdcIDs = []
 
         rivers = self.riverSHP.loc[grdcIDs]
-        print(self.riverSHP.crs)
         # Mercator: 3395
         # Lat/Lon: 4326
         rivers = rivers.to_crs("EPSG:4326")
@@ -479,7 +500,7 @@ class InundationData(Dataset):
         allBasins = self.basinATLAS[self.basinATLAS.index.isin(allBasinIDs)]
         allBasins = allBasins.to_crs("EPSG:4326")
 
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(40, 12))
         allBasins.plot(ax=ax, color="white", edgecolor="black")
         basins.plot(ax=ax, color='white', edgecolor='green')
         rivers.plot(ax=ax, color='white', edgecolor='blue')
@@ -531,7 +552,7 @@ class GraphSizeSampler(Sampler):
             batchSizes = [batchSizes[i] for i in range(len(batchSizes)) if len(self.batches[i]) == batchSize]
             self.batches = [batch for batch in self.batches if len(batch) == batchSize]
 
-        plt.figure(figsize=(40, 12))
+        plt.figure(figsize=(20, 6))
         plt.subplot(1, 3, 1)
         plt.title("Node Count Distribution per Sample")
         plt.hist(sizes)
