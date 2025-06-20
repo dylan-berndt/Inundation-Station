@@ -18,6 +18,7 @@
             "outputDim": 64
         },
         "block": {
+            "dropout": 0.2,
             "gnn": {
                 "in_channels": 64,
                 "out_channels": 64,
@@ -47,6 +48,7 @@
             "outputDim": 64
         },
         "block": {
+            "dropout": 0.2,
             "gnn": {
                 "in_channels": 64,
                 "out_channels": 64,
