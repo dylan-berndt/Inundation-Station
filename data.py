@@ -167,7 +167,7 @@ class InundationData(Dataset):
 
             for column in basinData.columns:
                 if column in ["total_precipitation_sum", "snowfall_sum", "surface_net_solar_radiation_sum"]:
-                    basinData[column] = np.log10(basinData[column])
+                    basinData[column] = np.log10(np.clip(basinData[column], 1e-6, np.inf))
                 if column == "date":
                     continue
                 mean, std = self.era5Scales[column]
@@ -256,7 +256,7 @@ class InundationData(Dataset):
         self.graphSizes = []
         for key in self.grdcDict:
             upstreamBasins = nx.ancestors(graph, self.translateDict[key])
-            areas = [basinArea.loc(int(basinID))["SUB_AREA"] for basinID in upstreamBasins]
+            areas = [basinArea.loc[int(self.translateDict[key])]["SUB_AREA"]] + [basinArea.loc[int(basinID)]["SUB_AREA"] for basinID in upstreamBasins]
             self.grdcDict[key]["Area"] = sum(areas)
 
             timeSeries = self.grdcDict[key]["Time"]
@@ -492,7 +492,7 @@ class InundationData(Dataset):
         allBasins = self.basinATLAS[self.basinATLAS.index.isin(allBasinIDs)]
         allBasins = allBasins.to_crs("EPSG:4326")
 
-        fig, ax = plt.subplots(figsize=(40, 12))
+        fig, ax = plt.subplots(figsize=(20, 6))
         allBasins.plot(ax=ax, color="white", edgecolor="black")
         basins.plot(ax=ax, color='white', edgecolor='green')
         rivers.plot(ax=ax, color='white', edgecolor='blue')

@@ -152,7 +152,7 @@ def era5Scales(path, basinATLAS):
         # for actual variance, but it doesn't really matter as long as it's close
         for column in df.columns:
             if column in ["total_precipitation_sum", "snowfall_sum", "surface_net_solar_radiation_sum"]:
-                df[column] = np.log10(df[column])
+                df[column] = np.log10(np.clip(df[column], 1e-6, np.inf))
             if "_sum" in column:
                 df[column] = df[column] / area
             if column not in scales:

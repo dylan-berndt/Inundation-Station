@@ -219,7 +219,7 @@ class CMALKGE(nn.Module):
     def forward(self, yPred, yTrue, means, *args, **kwargs):
         yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
 
-        r, _ = pearsonr(yPred.flatten().cpu().numpy(), yTrue.flatten().cpu().numpy())
+        r, _ = pearsonr(yPred.detach().flatten().cpu().numpy(), yTrue.detach().flatten().cpu().numpy())
 
         beta = torch.mean(yPred) / torch.mean(yTrue)
         alpha = torch.std(yPred) / torch.std(yTrue)
