@@ -431,6 +431,7 @@ class InundationData(Dataset):
 
             num_nodes=len(upstreamBasins),
             nodes=len(upstreamBasins),
+            area=targetScale,
             grdcID=grdcID
         )
 
@@ -445,6 +446,7 @@ class InundationData(Dataset):
 
             num_nodes=len(upstreamBasins),
             nodes=len(upstreamBasins),
+            area=targetScale,
             grdcID=grdcID
         )
 
@@ -614,5 +616,46 @@ class FloodHubData(InundationData):
         super().__init__(*args, **kwargs)
 
     def __getitem__(self, i):
+        (past, future), targets = super().__getitem__(i)
+
+        size = past.area
+        mult = size / torch.sum(size)
+
+        past.era5 = torch.sum(past.era5 * mult, dim=0)
+        past.basinContinuous = torch.sum(past.basinContinuous * mult, dim=0)
+
+        future.era5 = torch.sum(future.era5 * mult, dim=0)
+        future.basinContinuous = torch.sum(future.basinContinuous * mult, dim=0)
+
+        del past.basinDiscrete
+        del future.basinDiscrete
+        del past.edge_index
+        del future.edge_index
+
+        return (past, future), targets
+
+    def info(self, sample=None):
         pass
+
+    def display(self, sample=None):
+        pass
+
+    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234):
+        torch.manual_seed(seed)
+        random.seed(seed)
+        np.random.seed(seed)
+
+        riverIDs = list(dataset.grdcDict.keys())
+        trainIDs = np.array(riverIDs)[np.random.choice(len(riverIDs), int(len(riverIDs) * trainSplit), replace=False)]
+        trainIndexMask = np.isin(dataset.indexMap, trainIDs)
+        trainIndex = np.arange(len(dataset))[trainIndexMask]
+        testIndex = np.arange(len(dataset))[~trainIndexMask]
+
+        train = torch.utils.data.Subset(dataset, trainIndex)
+        test = torch.utils.data.Subset(dataset, testIndex)
+
+        train = DataLoader(train, generator=torch.Generator(device), batch_size=dataset.config.batchSize, shuffle=shuffle)
+        test = DataLoader(test, generator=torch.Generator(device), batch_size=dataset.config.batchSize, shuffle=shuffle)
+
+        return train, test
 
