@@ -63,7 +63,12 @@ The final folder structure should look something like this:
 ```
 
 ### 5. Install package requirements
-``python -m pip install -r requirements.txt``
+```
+python3.11 -m venv venv
+.\venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
 
 ### 6. Run vis.py
 You can choose to either run this script or disable the visualizer in the training notebook. 
