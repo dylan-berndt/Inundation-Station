@@ -147,8 +147,7 @@ class InundationData(Dataset):
 
         print()
 
-        with open("scales.json", "r") as file:
-            self.era5Scales = json.load(file)
+        self.era5Scales = config.scales
 
         self.basinATLAS = gpd.read_file(os.path.join(config.path, "BasinATLAS_v10_shp", "BasinATLAS_v10_lev07.shp"))
         # Why in the name of our lord are there duplicate Pfafstetter IDs in the BasinATLAS data. What
@@ -616,32 +615,4 @@ class FloodHubData(InundationData):
 
     def __getitem__(self, i):
         pass
-
-
-def precomputeJoins(config):
-    if not os.path.exists(os.path.join(config.path, "joined", "RiverATLAS_NA_Joined.shp")):
-        joinGRDCRiverATLAS(config.path)
-
-    if not os.path.exists(os.path.join(config.path, "joined", "BasinATLAS_NA_Joined.shp")):
-        joinGRDCBasinATLAS(config.path)
-
-    newRiverSHP = gpd.read_file(os.path.join(config.path, "joined", "RiverATLAS_NA_Joined.shp"))
-    newRiverSHP.info()
-
-    config = classifyColumns(newRiverSHP, config, "river")
-    config.overwrite()
-
-    newBasinSHP = gpd.read_file(os.path.join(config.path, "joined", "BasinATLAS_NA_Joined.shp"))
-    newBasinSHP.info()
-
-    config = classifyColumns(newBasinSHP, config, "basin")
-    config.overwrite()
-
-    if len(glob(os.path.join(config.path, "series", "ERA5_Parquet", "*.parquet"))) < 1:
-        csvToParquet(os.path.join(config.path, "series", "ERA5"), os.path.join(config.path, "series", "ERA5_Parquet"))
-
-    basinATLAS = gpd.read_file(os.path.join(config.path, "BasinATLAS_v10_shp", "BasinATLAS_v10_lev07.shp"))
-
-    if not os.path.exists("scales.json"):
-        era5Scales(os.path.join(config.path, "series", "ERA5_Parquet"), basinATLAS)
 

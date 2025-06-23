@@ -13,7 +13,7 @@ Future work would see aggregation over level 12 geometries for maximum granulari
 ### 1. Download ERA5 data
 Run export/Basin_Export.ipynb in a Google Colab environment to export ERA5 data for individual basins. 
 
-Make sure to either create a "Basin Differentiation" folder in your Google Drive or change the folder name. Also make sure to sign up for Google Earth Engine, then create a project and change the project name in Basin_Export to the name of your project. This process will take a while, and Google offers a [Task Manager](https://code.earthengine.google.com/tasks) to track queued tasks.
+Make sure to either create a "Basin Differentiation" folder in your Google Drive or change the folder name. Also make sure to sign up for Google Earth Engine, then create a project and change the project name in Basin_Export to the name of your project. This process will take a while, and Google offers a [Task Manager](https://code.earthengine.google.com/tasks) to track queued tasks. (Maximum number of concurrent tasks is capped, you may need to run the export script multiple times)
 
 Specify region and level of study with [HydroSHEDS](https://developers.google.com/earth-engine/datasets/catalog/WWF_HydroSHEDS_v1_Basins_hybas_9#description) parameters:
 
@@ -58,7 +58,7 @@ The final folder structure should look something like this:
 │   │       └── Basin_AreaWeighted_TS_7001232.csv
 │   └── joined
 ├── train.ipynb
-├── data.py
+├── test.ipynb
 └── README.md
 ```
 

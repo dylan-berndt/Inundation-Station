@@ -174,7 +174,34 @@ def era5Scales(path, basinATLAS):
     for column in scales:
         scales[column] = scales[column][0], math.sqrt(scales[column][1] / iterations)
 
-    # TODO: Move inside config
-    with open("scales.json", "w") as file:
-        del scales["date"]
-        json.dump(scales, file)
+    del scales["date"]
+    return scales
+
+
+def precomputeJoins(config):
+    if not os.path.exists(os.path.join(config.path, "joined", "RiverATLAS_NA_Joined.shp")):
+        joinGRDCRiverATLAS(config.path)
+
+    if not os.path.exists(os.path.join(config.path, "joined", "BasinATLAS_NA_Joined.shp")):
+        joinGRDCBasinATLAS(config.path)
+
+    newRiverSHP = gpd.read_file(os.path.join(config.path, "joined", "RiverATLAS_NA_Joined.shp"))
+    newRiverSHP.info()
+
+    config = classifyColumns(newRiverSHP, config, "river")
+    config.overwrite()
+
+    newBasinSHP = gpd.read_file(os.path.join(config.path, "joined", "BasinATLAS_NA_Joined.shp"))
+    newBasinSHP.info()
+
+    config = classifyColumns(newBasinSHP, config, "basin")
+    config.overwrite()
+
+    if len(glob(os.path.join(config.path, "series", "ERA5_Parquet", "*.parquet"))) < 1:
+        csvToParquet(os.path.join(config.path, "series", "ERA5"), os.path.join(config.path, "series", "ERA5_Parquet"))
+
+    basinATLAS = gpd.read_file(os.path.join(config.path, "BasinATLAS_v10_shp", "BasinATLAS_v10_lev07.shp"))
+
+    if "scales" not in config:
+        config.scales = era5Scales(os.path.join(config.path, "series", "ERA5_Parquet"), basinATLAS)
+        
