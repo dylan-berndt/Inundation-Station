@@ -204,4 +204,5 @@ def precomputeJoins(config):
 
     if "scales" not in config:
         config.scales = era5Scales(os.path.join(config.path, "series", "ERA5_Parquet"), basinATLAS)
+    config.overwrite()
         
