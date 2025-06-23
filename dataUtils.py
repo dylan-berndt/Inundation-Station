@@ -39,7 +39,6 @@ def getGRDCDataframe(path):
 
 
 # TODO: Rework to join multiple regions of RiverATLAS
-# TODO: Double check that streams are related to RiverATLAS with areas
 def joinGRDCRiverATLAS(path, location="NA"):
     grdcDF = getGRDCDataframe(path)
 

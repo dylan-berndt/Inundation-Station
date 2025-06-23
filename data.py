@@ -93,7 +93,7 @@ class InundationData(Dataset):
         self.riverSHP = riverSHP
 
         for grdcID, row in riverSHP.iterrows():
-            grdcDict[grdcID] = {}
+            grdcDict[grdcID] = {"Catchment": row["area"]}
 
         for pfafID, row in basinSHP.iterrows():
             translateDict[row["id"]] = str(row["PFAF_ID"])
@@ -257,7 +257,15 @@ class InundationData(Dataset):
         for key in self.grdcDict:
             upstreamBasins = nx.ancestors(graph, self.translateDict[key])
             areas = [basinArea.loc[int(self.translateDict[key])]["SUB_AREA"]] + [basinArea.loc[int(basinID)]["SUB_AREA"] for basinID in upstreamBasins]
-            self.grdcDict[key]["Area"] = sum(areas)
+            calculatedArea = sum(areas)
+            self.grdcDict[key]["Area"] = calculatedArea
+
+            areaDiff = (calculatedArea - self.grdcDict[key]["Catchment"]) / self.grdcDict[key]["Catchment"]
+            if areaDiff > 0.2:
+                del self.grdcDict[key]
+                continue
+
+            self.grdcDict[key]["AreaDiff"] = areaDiff
 
             timeSeries = self.grdcDict[key]["Time"]
 
@@ -362,7 +370,7 @@ class InundationData(Dataset):
         riverTime = riverTime[offset: offset + self.config.history + self.config.future]
 
         targetMean, targetDev = self.grdcDict[grdcID]["Mean"], self.grdcDict[grdcID]["Deviation"]
-        targetScale = self.grdcDict[grdcID]["Area"]
+        targetScale = self.grdcDict[grdcID]["Catchment"]
 
         dischargeHistory = riverStage[offset: offset + self.config.history] / targetScale
         dischargeFuture = riverStage[offset + self.config.history: offset + self.config.history + self.config.future] / targetScale
