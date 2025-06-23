@@ -6,6 +6,7 @@
     "history": 120,
     "future": 7,
     "seed": 1234,
+    "excludeDiffBasins": true,
     "appendDimensionPath": "encoder.block.gnn.hidden_channels",
     "encoder": {
         "basinProjection": {

@@ -262,11 +262,11 @@ class InundationData(Dataset):
             self.grdcDict[key]["Area"] = calculatedArea
 
             areaDiff = (calculatedArea - self.grdcDict[key]["Catchment"]) / self.grdcDict[key]["Catchment"]
-            if areaDiff > 0.2:
+            self.grdcDict[key]["AreaDiff"] = areaDiff
+
+            if areaDiff > 0.2 and config.excludeDiffBasins:
                 del self.grdcDict[key]
                 continue
-
-            self.grdcDict[key]["AreaDiff"] = areaDiff
 
             timeSeries = self.grdcDict[key]["Time"]
 
