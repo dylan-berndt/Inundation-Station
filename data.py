@@ -332,6 +332,18 @@ class InundationData(Dataset):
         config.encoder.riverProjection.discreteRange = self.riverDiscreteColumnRanges
         config.decoder.riverProjection.discreteRange = self.riverDiscreteColumnRanges
 
+        for grdcID in self.grdcDict:
+            riverContinuous = torch.tensor(self.riverContinuous.loc[int(grdcID)].to_numpy(), dtype=torch.float32)
+            riverDiscrete = torch.tensor(self.riverDiscrete.loc[int(grdcID)].to_numpy(dtype=np.int64), dtype=torch.long)
+            self.grdcDict[grdcID]["atlasContinuous"] = riverContinuous
+            self.grdcDict[grdcID]["altasDiscrete"] = riverDiscrete
+
+        for pfafID in self.pfafDict:
+            basinContinuous = torch.tensor(self.basinContinuous.loc[int(pfafID)].to_numpy(), dtype=torch.float32)
+            basinDiscrete = torch.tensor(self.basinDiscrete.loc[int(pfafID)].to_numpy(dtype=np.int64), dtype=torch.long)
+            self.pfafDict[pfafID]["atlasContinuous"] = basinContinuous
+            self.pfafDict[pfafID]["atlasDiscrete"] = basinDiscrete
+
         print("Static Input Scaling Complete")
 
     def __len__(self):
@@ -350,16 +362,6 @@ class InundationData(Dataset):
         riverTime = riverTime[offset: offset + self.config.history + self.config.future]
 
         targetMean, targetDev = self.grdcDict[grdcID]["Mean"], self.grdcDict[grdcID]["Deviation"]
-
-        # dischargeHistory = riverStage[offset: offset + self.config.history]
-        # dischargeHistory = (dischargeHistory - targetMean) / targetDev
-
-        # dischargeFuture = riverStage[offset + self.config.history: offset + self.config.history + self.config.future]
-        # dischargeFuture = (dischargeFuture - targetMean) / targetDev
-
-        # thresholds = self.grdcDict[grdcID]["Thresholds"]
-        # thresholds = [(threshold - targetMean) / targetDev for threshold in thresholds]
-
         targetScale = self.grdcDict[grdcID]["Area"]
 
         dischargeHistory = riverStage[offset: offset + self.config.history] / targetScale
@@ -386,16 +388,20 @@ class InundationData(Dataset):
         era5Future = self.forecastNoise(era5Future)
 
         # TODO: Convert from pandas to torch for faster processing
-        basinContinuousList = [torch.tensor(self.basinContinuous.loc[int(basinID)].to_numpy(), dtype=torch.float32)
-                               for basinID in upstreamBasins]
-        basinDiscreteList = [torch.tensor(self.basinDiscrete.loc[int(basinID)].to_numpy(dtype=np.int64), dtype=torch.long)
-                             for basinID in upstreamBasins]
+        # basinContinuousList = [torch.tensor(self.basinContinuous.loc[int(basinID)].to_numpy(), dtype=torch.float32)
+        #                        for basinID in upstreamBasins]
+        # basinDiscreteList = [torch.tensor(self.basinDiscrete.loc[int(basinID)].to_numpy(dtype=np.int64), dtype=torch.long)
+        #                      for basinID in upstreamBasins]
+        basinContinuousList = [self.pfafDict[basinID]["atlasContinuous"] for basinID in upstreamBasins]
+        basinDiscreteList = [self.pfafDict[basinID]["atlasDiscrete"] for basinID in upstreamBasins]
 
         basinContinuous = torch.stack(basinContinuousList, dim=0)
         basinDiscrete = torch.stack(basinDiscreteList, dim=0)
 
-        riverContinuous = torch.tensor(self.riverContinuous.loc[grdcID].to_numpy(), dtype=torch.float32)
-        riverDiscrete = torch.tensor(self.riverDiscrete.loc[grdcID].to_numpy(dtype=np.int64), dtype=torch.long)
+        # riverContinuous = torch.tensor(self.riverContinuous.loc[grdcID].to_numpy(), dtype=torch.float32)
+        # riverDiscrete = torch.tensor(self.riverDiscrete.loc[grdcID].to_numpy(dtype=np.int64), dtype=torch.long)
+        riverContinuous = self.grdcDict[grdcID]["atlasContinuous"]
+        riverDiscrete = self.grdcDict[grdcID]["atlasDiscrete"]
 
         structure = torch.transpose(torch.tensor(self.upstreamStructure[pfafID], dtype=torch.long), 0, 1).contiguous()
 
