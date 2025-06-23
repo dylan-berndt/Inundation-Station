@@ -393,6 +393,7 @@ class InundationData(Dataset):
         era5History = era5Data[:, :self.config.history]
         era5Future = era5Data[:, -self.config.future:]
 
+        # TODO: Replace future entirely with noise?
         era5Future = self.forecastNoise(era5Future)
 
         # TODO: Convert from pandas to torch for faster processing
@@ -512,6 +513,31 @@ class InundationData(Dataset):
         rivers.plot(ax=ax, color='white', edgecolor='blue')
         locations.plot(ax=ax, marker='o', color='red', markersize=5)
         plt.show()
+
+    @staticmethod
+    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234):
+        torch.manual_seed(seed)
+        random.seed(seed)
+        np.random.seed(seed)
+
+        # TODO: More stratified subsets using dataset.lengths and geographic information
+        riverIDs = list(dataset.grdcDict.keys())
+        trainIDs = np.array(riverIDs)[np.random.choice(len(riverIDs), int(len(riverIDs) * trainSplit), replace=False)]
+        trainIndexMask = np.isin(dataset.indexMap, trainIDs)
+        trainIndex = np.arange(len(dataset))[trainIndexMask]
+        testIndex = np.arange(len(dataset))[~trainIndexMask]
+
+        train = torch.utils.data.Subset(dataset, trainIndex)
+        test = torch.utils.data.Subset(dataset, testIndex)
+
+        trainSampler = GraphSizeSampler(train, nodesPerBatch=config.nodesPerBatch, force=False, shuffle=shuffle)
+        testSampler = GraphSizeSampler(test, nodesPerBatch=config.nodesPerBatch, force=False, shuffle=shuffle)
+
+        train = DataLoader(train, batch_sampler=trainSampler, generator=torch.Generator(device))
+        test = DataLoader(test, batch_sampler=testSampler, generator=torch.Generator(device))
+
+        return train, test
+
 
 
 class GraphSizeSampler(Sampler):
