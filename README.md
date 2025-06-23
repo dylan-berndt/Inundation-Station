@@ -11,7 +11,7 @@ Future work would see aggregation over level 12 geometries for maximum granulari
 ## Getting Started
 
 ### 1. Download ERA5 data
-Run Basin_Export.ipynb in a Google Colab environment to export ERA5 data for individual basins. 
+Run export/Basin_Export.ipynb in a Google Colab environment to export ERA5 data for individual basins. 
 
 Make sure to either create a "Basin Differentiation" folder in your Google Drive or change the folder name. Also make sure to sign up for Google Earth Engine, then create a project and change the project name in Basin_Export to the name of your project. This process will take a while, and Google offers a [Task Manager](https://code.earthengine.google.com/tasks) to track queued tasks.
 
@@ -65,16 +65,13 @@ The final folder structure should look something like this:
 ### 5. Install package requirements
 ``python -m pip install -r requirements.txt``
 
-### 6. Run data.py
-This will precompute joins on GRDC, ERA5, and HydroATLAS data; as well as compute scaling factors for model inputs. 
-
-### 7. Run vis.py
+### 6. Run vis.py
 You can choose to either run this script or disable the visualizer in the training notebook. 
 
 Running the script creates a visualizer for model metrics such as loss, recall, and NSE. This could technically be run on another device if client is updated in the training notebook to connect to the machine.
 
-### 8. Run train.ipynb
-Begins training. Make sure to specify the chosen config, model, and dataset. 
+### 7. Run train.ipynb
+Begins training. Make sure to specify the chosen config, model, and dataset. First run will take some extra time precomputing joins on ERA5, GRDC, and BasinATLAS data.
 
 ## Model
 

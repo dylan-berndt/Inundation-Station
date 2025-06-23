@@ -174,6 +174,7 @@ def era5Scales(path, basinATLAS):
     for column in scales:
         scales[column] = scales[column][0], math.sqrt(scales[column][1] / iterations)
 
+    # TODO: Move inside config
     with open("scales.json", "w") as file:
         del scales["date"]
         json.dump(scales, file)

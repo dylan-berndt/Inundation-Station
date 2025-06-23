@@ -14,8 +14,8 @@ from scipy.stats import mode
 import networkx as nx
 import duckdb
 
-from dataUtils import *
-from utils import *
+from precompute import *
+from ..config import *
 
 from datetime import datetime
 from itertools import chain
@@ -67,6 +67,8 @@ def defaultNoise(minNoise, maxNoise):
 class InundationData(Dataset):
     def __init__(self, config, location="NA", noise=defaultNoise(0.5, 0.7)):
         self.config = config
+
+        precomputeJoins(config)
 
         self.forecastNoise = noise
 
@@ -530,8 +532,8 @@ class InundationData(Dataset):
         train = torch.utils.data.Subset(dataset, trainIndex)
         test = torch.utils.data.Subset(dataset, testIndex)
 
-        trainSampler = GraphSizeSampler(train, nodesPerBatch=config.nodesPerBatch, force=False, shuffle=shuffle)
-        testSampler = GraphSizeSampler(test, nodesPerBatch=config.nodesPerBatch, force=False, shuffle=shuffle)
+        trainSampler = GraphSizeSampler(train, nodesPerBatch=dataset.config.nodesPerBatch, force=False, shuffle=shuffle)
+        testSampler = GraphSizeSampler(test, nodesPerBatch=dataset.config.nodesPerBatch, force=False, shuffle=shuffle)
 
         train = DataLoader(train, batch_sampler=trainSampler, generator=torch.Generator(device))
         test = DataLoader(test, batch_sampler=testSampler, generator=torch.Generator(device))
@@ -616,9 +618,7 @@ class FloodHubData(InundationData):
         pass
 
 
-if __name__ == "__main__":
-    config = Config().load("config.json")
-
+def precomputeJoins(config):
     if not os.path.exists(os.path.join(config.path, "joined", "RiverATLAS_NA_Joined.shp")):
         joinGRDCRiverATLAS(config.path)
 
@@ -629,17 +629,13 @@ if __name__ == "__main__":
     newRiverSHP.info()
 
     config = classifyColumns(newRiverSHP, config, "river")
-    config.save("config.json")
-
-    print()
+    config.overwrite()
 
     newBasinSHP = gpd.read_file(os.path.join(config.path, "joined", "BasinATLAS_NA_Joined.shp"))
     newBasinSHP.info()
 
     config = classifyColumns(newBasinSHP, config, "basin")
-    config.save("config.json")
-
-    print()
+    config.overwrite()
 
     if len(glob(os.path.join(config.path, "series", "ERA5_Parquet", "*.parquet"))) < 1:
         csvToParquet(os.path.join(config.path, "series", "ERA5"), os.path.join(config.path, "series", "ERA5_Parquet"))
@@ -648,11 +644,4 @@ if __name__ == "__main__":
 
     if not os.path.exists("scales.json"):
         era5Scales(os.path.join(config.path, "series", "ERA5_Parquet"), basinATLAS)
-
-    dataset = InundationData(config)
-    dataset.info()
-
-    newMadrid = 36.58144457928249, -89.53144490406078
-
-    dataset.display()
 

@@ -10,7 +10,7 @@ from torch_geometric.nn.attention import PerformerAttention
 import torch_geometric.transforms as T
 
 from modules import *
-from utils import *
+from ..config import *
 
 
 # https://github.com/pyg-team/pytorch_geometric/blob/master/examples/graph_gps.py
@@ -494,8 +494,7 @@ class FloodHub(nn.Module):
 
 # Memory profiling
 if __name__ == "__main__":
-    config = Config().load("config.json")
-
+    config = Config().load(os.path.join("configs", "config.json"))
     device = "cuda" if torch.cuda.is_available() else "cpu"
     torch.set_default_device(device)
 
