@@ -12,6 +12,8 @@ import torch_geometric.transforms as T
 from .modules import *
 from ..config import *
 
+import os
+
 
 # https://github.com/pyg-team/pytorch_geometric/blob/master/examples/graph_gps.py
 class RedrawProjection:
@@ -455,9 +457,20 @@ class FloodCoder(nn.Module):
 
         self.head = CMAL(**config.head)
 
-    # TODO: Determine format of inputs
     def forward(self, inputs, state=None):
-        pass
+        inputShape = inputs.era5.shape
+        basinContinuous = inputs.basinContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
+        basinProjected = torch.concatenate([inputs.era5, basinContinuous], dim=-1)
+        projected = self.basinProjection(basinProjected)
+
+        series, (hidden, cell) = self.lstm(projected, state)
+
+        riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
+        riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
+        riverProjected = torch.concatenate([series, riverContinuous], dim=-1)
+        projected = self.riverProjection(riverProjected, riverDiscrete)
+
+        return self.head(projected), (hidden, cell)
     
 
 class FloodHub(nn.Module):

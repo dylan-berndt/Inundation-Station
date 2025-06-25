@@ -79,41 +79,6 @@ class Server:
                 self.time[name] = list(point)
 
 
-# def plotData(data):
-#     plt.clf()
-
-#     plots = len(data.keys())
-#     if plots == 0:
-#         return
-
-#     width = math.ceil(plots / 3 * 2)
-#     height = int(plots / width) * 4
-
-#     for n, name in enumerate(data.keys()):
-#         point = np.array(server.time[name])
-#         datum = np.array(server.data[name])
-
-#         if len(datum) > MAX_DISPLAY_POINTS:
-#             plt.subplot(height, width, n + plots + 1)
-#             points = point[len(datum) - (MAX_DISPLAY_POINTS + 1):]
-#             display = datum[len(datum) - (MAX_DISPLAY_POINTS + 1):]
-#             plt.plot(points, display, label=name)
-
-#             plt.axhline(np.mean(display), linestyle='--', color='orange')
-
-#             plt.legend()
-
-#             # divisor = len(datum) // MAX_DISPLAY_POINTS
-#             # datum = datum[::divisor]
-
-#         plt.subplot(height, width, n+1)
-#         plt.plot(point, datum, label=name)
-
-#         plt.legend()
-
-#     plt.pause(0.01)
-
-
 class DataGUI:
     def __init__(self, server):
         self.server = server
@@ -167,11 +132,11 @@ class DataGUI:
         fig = Figure(figsize=(10, 4), dpi=100)
         ax1 = fig.add_subplot(121)
         ax1.set_title(name + " Overall")
-        ax1.grid(True, alpha=0.3)
+        ax1.grid(True, alpha=0.7)
 
         ax2 = fig.add_subplot(122)
         ax2.set_title(name + " Recent")
-        ax2.grid(True, alpha=0.3)
+        ax2.grid(True, alpha=0.7)
 
         canvas = FigureCanvasTkAgg(fig, plotFrame)
         canvas.draw()
@@ -206,14 +171,14 @@ class DataGUI:
             ax1 = plot["ax1"]
             ax1.clear()
             ax1.set_title(name + " Overall")
-            ax1.grid(True, alpha=0.3)
+            ax1.grid(True, alpha=0.7)
 
             ax1.plot(point, datum, label=name, alpha=0.7)
 
             ax2 = plot["ax2"]
             ax2.clear()
             ax2.set_title(name + " Recent")
-            ax2.grid(True, alpha=0.3)
+            ax2.grid(True, alpha=0.7)
 
             if len(datum) > MAX_DISPLAY_POINTS:
                 points = point[len(datum) - (MAX_DISPLAY_POINTS + 1):]
