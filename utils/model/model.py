@@ -9,7 +9,7 @@ from torch_geometric.utils import scatter
 from torch_geometric.nn.attention import PerformerAttention
 import torch_geometric.transforms as T
 
-from modules import *
+from .modules import *
 from ..config import *
 
 

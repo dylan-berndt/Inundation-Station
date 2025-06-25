@@ -14,7 +14,7 @@ from scipy.stats import mode
 import networkx as nx
 import duckdb
 
-from precompute import *
+from .precompute import *
 from ..config import *
 
 from datetime import datetime
@@ -95,7 +95,7 @@ class InundationData(Dataset):
         self.riverSHP = riverSHP
 
         for grdcID, row in riverSHP.iterrows():
-            grdcDict[grdcID] = {"Catchment": row["area"]}
+            grdcDict[grdcID] = {"Catchment": float(row["area"])}
 
         for pfafID, row in basinSHP.iterrows():
             translateDict[row["id"]] = str(row["PFAF_ID"])
@@ -255,7 +255,7 @@ class InundationData(Dataset):
         self.indexMap = []
         self.offsetMap = []
         self.graphSizes = []
-        for key in self.grdcDict:
+        for key in list(self.grdcDict.keys()):
             upstreamBasins = nx.ancestors(graph, self.translateDict[key])
             areas = [basinArea.loc[int(self.translateDict[key])]["SUB_AREA"]] + [basinArea.loc[int(basinID)]["SUB_AREA"] for basinID in upstreamBasins]
             calculatedArea = sum(areas)
@@ -342,10 +342,10 @@ class InundationData(Dataset):
         config.decoder.riverProjection.discreteRange = self.riverDiscreteColumnRanges
 
         for grdcID in self.grdcDict:
-            riverContinuous = torch.tensor(self.riverContinuous.loc[int(grdcID)].to_numpy(), dtype=torch.float32)
-            riverDiscrete = torch.tensor(self.riverDiscrete.loc[int(grdcID)].to_numpy(dtype=np.int64), dtype=torch.long)
+            riverContinuous = torch.tensor(self.riverContinuous.loc[grdcID].to_numpy(), dtype=torch.float32)
+            riverDiscrete = torch.tensor(self.riverDiscrete.loc[grdcID].to_numpy(dtype=np.int64), dtype=torch.long)
             self.grdcDict[grdcID]["atlasContinuous"] = riverContinuous
-            self.grdcDict[grdcID]["altasDiscrete"] = riverDiscrete
+            self.grdcDict[grdcID]["atlasDiscrete"] = riverDiscrete
 
         for pfafID in self.pfafDict:
             basinContinuous = torch.tensor(self.basinContinuous.loc[int(pfafID)].to_numpy(), dtype=torch.float32)

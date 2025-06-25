@@ -13,7 +13,7 @@ import numpy as np
 def getGRDCDataframe(path):
     folderGRDC = os.path.join(path, "series", "GRDC", "*.txt")
 
-    grdcDF = pd.DataFrame(columns=['id', 'lat', 'lon'])
+    grdcDF = pd.DataFrame(columns=['id', 'lat', 'lon', 'area'])
 
     for filePath in sorted(glob(folderGRDC)):
         file = open(filePath, "r")
@@ -30,7 +30,7 @@ def getGRDCDataframe(path):
             if "# Longitude" in line:
                 lon = line.split()[3]
             if "# Catchment" in line:
-                area = line.split()[4]
+                area = float(line.split()[4])
 
         newDF = pd.DataFrame([[riverID, lat, lon, area]], columns=grdcDF.columns)
         grdcDF = pd.concat([newDF, grdcDF], ignore_index=True)
@@ -186,13 +186,11 @@ def precomputeJoins(config):
         joinGRDCBasinATLAS(config.path)
 
     newRiverSHP = gpd.read_file(os.path.join(config.path, "joined", "RiverATLAS_NA_Joined.shp"))
-    newRiverSHP.info()
 
     config = classifyColumns(newRiverSHP, config, "river")
     config.overwrite()
 
     newBasinSHP = gpd.read_file(os.path.join(config.path, "joined", "BasinATLAS_NA_Joined.shp"))
-    newBasinSHP.info()
 
     config = classifyColumns(newBasinSHP, config, "basin")
     config.overwrite()

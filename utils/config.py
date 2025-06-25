@@ -3,8 +3,8 @@ import json
 
 class Config:
     def __init__(self):
-        self._location = None
         object.__setattr__(self, "_values", {})
+        self._location = None
 
     def keys(self):
         return self._values.keys()
@@ -17,13 +17,15 @@ class Config:
         return self._values[key]
 
     def __getattr__(self, key):
+        if key.startswith("_"):
+            return super().__getattribute__(key)
         if key in self._values:
             return self._values[key]
 
         raise AttributeError(f"{type(self).__name__} has no attribute {key}")
 
     def __setattr__(self, key, value):
-        if key == "_values":
+        if key.startswith("_"):
             object.__setattr__(self, key, value)
         else:
             self._values[key] = value
@@ -70,4 +72,3 @@ class Config:
             return {k: Config._serialize(v) for k, v in data.items()}
         else:
             return data
-
