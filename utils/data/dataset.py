@@ -121,7 +121,10 @@ class InundationData(Dataset):
             df = df[before & after]
 
             values = df[" Value"].to_numpy()
+            values[values < 0] = np.nan
             x, y = df["YYYY-MM-DD"].to_numpy(), values
+
+            x, y = x[~np.isnan(y)], y[~np.isnan(y)]
 
             if len(x) == 0:
                 del grdcDict[riverID]
@@ -260,6 +263,10 @@ class InundationData(Dataset):
             areas = [basinArea.loc[int(self.translateDict[key])]["SUB_AREA"]] + [basinArea.loc[int(basinID)]["SUB_AREA"] for basinID in upstreamBasins]
             calculatedArea = sum(areas)
             self.grdcDict[key]["Area"] = calculatedArea
+
+            normalizedStage = self.grdcDict[key]["Stage"] / calculatedArea
+            self.grdcDict[key]["Mean"] = torch.mean(normalizedStage).item()
+            self.grdcDict[key]["Deviation"] = torch.std(normalizedStage).item()
 
             areaDiff = abs(calculatedArea - self.grdcDict[key]["Catchment"]) / self.grdcDict[key]["Catchment"]
             self.grdcDict[key]["AreaDiff"] = areaDiff
