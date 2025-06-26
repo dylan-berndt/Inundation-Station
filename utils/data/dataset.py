@@ -126,7 +126,8 @@ class InundationData(Dataset):
 
             x, y = x[~np.isnan(y)], y[~np.isnan(y)]
 
-            if len(x) == 0:
+            # Empty? or Too many nans
+            if len(x) == 0 or np.sum(np.isnan(values)) / len(values) > 0.1:
                 del grdcDict[riverID]
                 continue
 

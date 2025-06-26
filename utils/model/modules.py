@@ -250,11 +250,13 @@ class CMALNSE(nn.Module):
         # yPred = yPred * deviations + means
         # yTrue = yTrue * deviations + means
 
-        numerator = torch.sum(torch.pow(yTrue - yPred, 2))
-        denominator = torch.sum(torch.pow(yTrue - means, 2))
+        # NSE per gauge
+        numerator = torch.sum(torch.pow(yTrue - yPred, 2), dim=1)
+        denominator = torch.sum(torch.pow(yTrue - means, 2), dim=1)
 
         value = 1 - (numerator / denominator)
         value = torch.nan_to_num(value, 0, 0, 0)
+        value = torch.mean(value)
         return value.item()
     
 
