@@ -114,10 +114,10 @@ class InundationGCLSTMBlock(nn.Module):
             hidden, cell = self.gclstm(inputs[:, t], edges, None, hidden, cell)
             outputs.append(hidden)
 
-        series = self.ln(torch.stack(outputs, dim=1))
+        # series = self.ln(torch.stack(outputs, dim=1))
         hidden, cell = self.hiddenBridge(hidden), self.cellBridge(cell)
 
-        return series, (hidden, cell)
+        return torch.stack(outputs, dim=1), (hidden, cell)
 
 
 class InundationGCLSTMCoder(nn.Module):
@@ -144,11 +144,11 @@ class InundationGCLSTMCoder(nn.Module):
             projected = projected + convolved
         # convolved, newState = self.block(projected, inputs.edge_index, state)
 
-        # batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)
-        # sampledBasin = convolved[batchIndices, :, :]
+        batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)
+        sampledBasin = projected[batchIndices, :, :]
 
         # TODO: Give upstream nodes information about distance to target node?
-        sampledBasin = scatter(projected, inputs.batch, dim=0, reduce='max')
+        # sampledBasin = scatter(projected, inputs.batch, dim=0, reduce='max')
 
         riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
         riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)

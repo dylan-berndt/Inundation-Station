@@ -261,7 +261,7 @@ class InundationData(Dataset):
             calculatedArea = sum(areas)
             self.grdcDict[key]["Area"] = calculatedArea
 
-            areaDiff = (calculatedArea - self.grdcDict[key]["Catchment"]) / self.grdcDict[key]["Catchment"]
+            areaDiff = abs(calculatedArea - self.grdcDict[key]["Catchment"]) / self.grdcDict[key]["Catchment"]
             self.grdcDict[key]["AreaDiff"] = areaDiff
 
             if areaDiff > 0.2 and config.excludeDiffBasins:
@@ -397,19 +397,12 @@ class InundationData(Dataset):
         # TODO: Replace future entirely with noise?
         era5Future = self.forecastNoise(era5Future)
 
-        # TODO: Convert from pandas to torch for faster processing
-        # basinContinuousList = [torch.tensor(self.basinContinuous.loc[int(basinID)].to_numpy(), dtype=torch.float32)
-        #                        for basinID in upstreamBasins]
-        # basinDiscreteList = [torch.tensor(self.basinDiscrete.loc[int(basinID)].to_numpy(dtype=np.int64), dtype=torch.long)
-        #                      for basinID in upstreamBasins]
         basinContinuousList = [self.pfafDict[basinID]["atlasContinuous"] for basinID in upstreamBasins]
         basinDiscreteList = [self.pfafDict[basinID]["atlasDiscrete"] for basinID in upstreamBasins]
 
         basinContinuous = torch.stack(basinContinuousList, dim=0)
         basinDiscrete = torch.stack(basinDiscreteList, dim=0)
 
-        # riverContinuous = torch.tensor(self.riverContinuous.loc[grdcID].to_numpy(), dtype=torch.float32)
-        # riverDiscrete = torch.tensor(self.riverDiscrete.loc[grdcID].to_numpy(dtype=np.int64), dtype=torch.long)
         riverContinuous = self.grdcDict[grdcID]["atlasContinuous"]
         riverDiscrete = self.grdcDict[grdcID]["atlasDiscrete"]
 
