@@ -190,6 +190,7 @@ class InundationData(Dataset):
                 sumLakes += 1
 
             pfafDict[pfafID]["Data"] = torch.nan_to_num(torch.tensor(basinData, dtype=torch.float32))
+            pfafDict[pfafID]["Area"] = area
 
             print(f"\r{f + 1}/{len(era5Paths)} ERA5 files loaded", end="")
 
@@ -385,8 +386,10 @@ class InundationData(Dataset):
         thresholds = [threshold / targetScale for threshold in thresholds]
 
         basinERA5Data = []
+        basinArea = []
         for b, basin in enumerate(upstreamBasins):
             data = self.pfafDict[basin]["Data"]
+
             first = int(data[0, 0].item())
             index = riverTime[0] - first
             length = riverTime[-1] - riverTime[0]
@@ -395,6 +398,11 @@ class InundationData(Dataset):
             data = torch.nan_to_num(data)
 
             basinERA5Data.append(data)
+
+            area = self.pfafDict[basin]["Area"]
+            basinArea.append(area)
+
+        basinArea = torch.tensor(basinArea, dtype=torch.float32)
 
         era5Data = torch.stack(basinERA5Data, dim=0)
         era5History = era5Data[:, :self.config.history]
@@ -431,6 +439,7 @@ class InundationData(Dataset):
             num_nodes=len(upstreamBasins),
             nodes=len(upstreamBasins),
             area=targetScale,
+            basinArea=basinArea,
             grdcID=grdcID
         )
 
@@ -446,6 +455,7 @@ class InundationData(Dataset):
             num_nodes=len(upstreamBasins),
             nodes=len(upstreamBasins),
             area=targetScale,
+            basinArea=basinArea,
             grdcID=grdcID
         )
 
@@ -617,7 +627,7 @@ class FloodHubData(InundationData):
     def __getitem__(self, i):
         (past, future), targets = super().__getitem__(i)
 
-        size = past.area
+        size = past.basinArea
         mult = size / torch.sum(size)
 
         past.era5 = torch.sum(past.era5 * mult, dim=0)
