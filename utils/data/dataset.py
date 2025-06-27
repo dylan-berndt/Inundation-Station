@@ -103,8 +103,6 @@ class InundationData(Dataset):
 
         print("GeoPandas Loaded")
 
-        allTargets = []
-
         grdcPaths = glob(os.path.join(config.path, "series", "GRDC", "*.txt"))
         for f, filePath in enumerate(grdcPaths):
             fileName = os.path.basename(filePath)
@@ -120,7 +118,7 @@ class InundationData(Dataset):
             after = df["YYYY-MM-DD"] >= (datetime(1980, 1, 1).timestamp() // 86400)
             df = df[before & after]
 
-            values = df[" Value"].to_numpy()
+            values = df[" Value"].to_numpy(dtype=np.float32)
             values[values < 0] = np.nan
             x, y = df["YYYY-MM-DD"].to_numpy(), values
 
@@ -138,16 +136,16 @@ class InundationData(Dataset):
             values = spline(linspace)
             values = np.clip(values, yMin, yMax)
 
-            grdcDict[riverID]["Time"] = df["YYYY-MM-DD"].to_numpy()
+            if np.min(values) < 0:
+                print(f"\n\n {riverID} {np.min(values), np.max(values)}")
+
+            grdcDict[riverID]["Time"] = linspace
             grdcDict[riverID]["Stage"] = torch.tensor(values, dtype=torch.float32)
             grdcDict[riverID]["Thresholds"] = calculateReturnPeriods(df)
             grdcDict[riverID]["Mean"] = np.mean(values)
             grdcDict[riverID]["Deviation"] = np.std(values)
-            allTargets.extend(list(values))
 
-            print(f"\r{f + 1}/{len(grdcPaths)} GRDC files loaded", end="")
-
-        # self.targetMean, self.targetDev = np.mean(allTargets), np.std(allTargets)
+            print(f"\r{f + 1}/{len(grdcPaths)} GRDC files loaded ({np.min(values)}, {np.max(values)})", end="")
 
         print()
 
@@ -264,6 +262,8 @@ class InundationData(Dataset):
             areas = [basinArea.loc[int(self.translateDict[key])]["SUB_AREA"]] + [basinArea.loc[int(basinID)]["SUB_AREA"] for basinID in upstreamBasins]
             calculatedArea = sum(areas)
             self.grdcDict[key]["Area"] = calculatedArea
+            if calculatedArea < 0:
+                print("WHAT", key, calculatedArea)
 
             normalizedStage = self.grdcDict[key]["Stage"] / calculatedArea
             self.grdcDict[key]["Mean"] = torch.mean(normalizedStage).item()
@@ -278,15 +278,13 @@ class InundationData(Dataset):
 
             timeSeries = self.grdcDict[key]["Time"]
 
-            seriesLength = timeSeries[-1] - timeSeries[0]
+            seriesLength = int(timeSeries[-1] - timeSeries[0])
             seriesLength -= config.history + config.future
             self.lengths.append(seriesLength)
             self.indexMap.extend([key] * seriesLength)
             self.offsetMap.extend(range(seriesLength))
             self.graphSizes.extend([len(self.upstreamBasins[translateDict[key]])] * seriesLength)
 
-            if timeSeries[1] - timeSeries[0] != 1:
-                print(timeSeries[0], timeSeries[1])
         print("Index Mapping Complete")
 
         self.basinATLAS = self.basinATLAS.set_index("PFAF_ID")
@@ -379,7 +377,7 @@ class InundationData(Dataset):
         riverTime = riverTime[offset: offset + self.config.history + self.config.future]
 
         targetMean, targetDev = self.grdcDict[grdcID]["Mean"], self.grdcDict[grdcID]["Deviation"]
-        targetScale = self.grdcDict[grdcID]["Catchment"]
+        targetScale = self.grdcDict[grdcID]["Area"]
 
         dischargeHistory = riverStage[offset: offset + self.config.history] / targetScale
         dischargeFuture = riverStage[offset + self.config.history: offset + self.config.history + self.config.future] / targetScale
@@ -392,7 +390,7 @@ class InundationData(Dataset):
             first = int(data[0, 0].item())
             index = riverTime[0] - first
             length = riverTime[-1] - riverTime[0]
-            data = data[index: index + length, 1:]
+            data = data[int(index): int(index + length), 1:]
 
             data = torch.nan_to_num(data)
 
