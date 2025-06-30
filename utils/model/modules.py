@@ -109,6 +109,22 @@ class CMAL(nn.Module):
 
         return m, b, t, p
 
+    @staticmethod
+    def median(params):
+        m, b, t, p = params
+        median = torch.zeros_like(m)
+        median[t > 1] = (m + ((t / b) * torch.log((1 + torch.pow(t, 2)) / (2 * torch.pow(t, 2)))))[t > 1]
+        median[t <= 1] = (m - ((1 / (b * t)) * torch.log((1 + torch.pow(t, 2)) / 2)))[t <= 1]
+        median = torch.sum(median * p, dim=-1)
+        return torch.sum(m * p, dim=-1)
+
+    @staticmethod
+    def mean(params):
+        m, b, t, p = params
+        mean = m + (1 - torch.pow(t, 2)) / (b * t)
+        mean = torch.sum(mean * p, dim=-1)
+        return mean
+
 
 # I might be stupid
 class BatchNorm(nn.Module):
@@ -141,8 +157,7 @@ class CMALMSE(nn.Module):
         super().__init__()
 
     def forward(self, yPred, yTrue):
-        m, b, t, p = yPred
-        yPred = torch.sum(m * p, dim=-1)
+        yPred = CMAL.median(yPred)
         return torch.mean(torch.pow(yPred - yTrue, 2))
 
 
@@ -151,7 +166,7 @@ class CMALNormalizedMeanAbsolute(nn.Module):
         super().__init__()
 
     def forward(self, yPred, yTrue, deviations, *args, **kwargs):
-        yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
+        yPred = CMAL.median(yPred)
         return torch.mean(torch.abs(yPred - yTrue)).item()
     
 
@@ -160,7 +175,7 @@ class CMALMeanAbsolute(nn.Module):
         super().__init__()
 
     def forward(self, yPred, yTrue, deviations, *args, **kwargs):
-        yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
+        yPred = CMAL.median(yPred)
         yPred = yPred * deviations
         yTrue = yTrue * deviations
         return torch.mean(torch.abs(yPred - yTrue)).item()
@@ -184,7 +199,7 @@ class CMALPrecision(nn.Module):
         yTrueC = torch.cat([batch[1] for batch in self.batches], dim=0)
         thresholdsC = torch.cat([batch[2] for batch in self.batches], dim=0)
 
-        yPredV = torch.sum(yPredC[0] * yPredC[3], dim=-1)
+        yPredV = CMAL.median(yPredC)
 
         threshold = thresholdsC[:, self.sampleNum].unsqueeze(-1)
 
@@ -221,7 +236,7 @@ class CMALRecall(nn.Module):
         yTrueC = torch.cat([batch[1] for batch in self.batches], dim=0)
         thresholdsC = torch.cat([batch[2] for batch in self.batches], dim=0)
 
-        yPredV = torch.sum(yPredC[0] * yPredC[3], dim=-1)
+        yPredV = CMAL.median(yPredC)
 
         threshold = thresholdsC[:, self.sampleNum].unsqueeze(-1)
 
@@ -245,7 +260,7 @@ class CMALNSE(nn.Module):
         super().__init__()
 
     def forward(self, yPred, yTrue, means, deviations, *args, **kwargs):
-        yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
+        yPred = CMAL.median(yPred)
 
         # yPred = yPred * deviations + means
         # yTrue = yTrue * deviations + means
@@ -265,7 +280,7 @@ class CMALKGE(nn.Module):
         super().__init__()
 
     def forward(self, yPred, yTrue, means, *args, **kwargs):
-        yPred = torch.sum(yPred[0] * yPred[3], dim=-1)
+        yPred = CMAL.median(yPred)
 
         r, _ = pearsonr(yPred.detach().flatten().cpu().numpy(), yTrue.detach().flatten().cpu().numpy())
 

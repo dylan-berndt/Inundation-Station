@@ -3,7 +3,7 @@
     "batchSize": 8,
     "nodesPerBatch": 2000,
     "dataSplit": 0.8,
-    "history": 365,
+    "history": 120,
     "future": 7,
     "seed": 1234,
     "excludeDiffBasins": true,
@@ -12,29 +12,59 @@
         "basinProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 32
+            "outputDim": 64,
+            "continuousDim": 284,
+            "discreteRange": [
+                18,
+                125,
+                23,
+                16,
+                13,
+                15,
+                755,
+                14,
+                417,
+                16
+            ]
         },
         "riverProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 32
+            "outputDim": 64,
+            "continuousDim": 322,
+            "discreteRange": [
+                2,
+                9,
+                7,
+                9,
+                15,
+                100,
+                16,
+                13,
+                10,
+                12,
+                118,
+                8,
+                82,
+                14
+            ]
         },
         "block": {
             "dropout": 0.2,
             "gnn": {
-                "in_channels": 32,
-                "out_channels": 32,
+                "in_channels": 64,
+                "out_channels": 64,
                 "K": 3
             },
             "bridge": {
-                "in_features": 32,
-                "out_features": 32
+                "in_features": 64,
+                "out_features": 64
             }
         },
         "blocks": 2,
         "head": {
-            "inputDim": 32,
-            "hiddenDim": 32,
+            "inputDim": 64,
+            "hiddenDim": 64,
             "mixtures": 1
         }
     },
@@ -42,29 +72,59 @@
         "basinProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 32
+            "outputDim": 64,
+            "continuousDim": 284,
+            "discreteRange": [
+                18,
+                125,
+                23,
+                16,
+                13,
+                15,
+                755,
+                14,
+                417,
+                16
+            ]
         },
         "riverProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 32
+            "outputDim": 64,
+            "continuousDim": 322,
+            "discreteRange": [
+                2,
+                9,
+                7,
+                9,
+                15,
+                100,
+                16,
+                13,
+                10,
+                12,
+                118,
+                8,
+                82,
+                14
+            ]
         },
         "block": {
             "dropout": 0.2,
             "gnn": {
-                "in_channels": 32,
-                "out_channels": 32,
+                "in_channels": 64,
+                "out_channels": 64,
                 "K": 3
             },
             "bridge": {
-                "in_features": 32,
-                "out_features": 32
+                "in_features": 64,
+                "out_features": 64
             }
         },
         "blocks": 2,
         "head": {
-            "inputDim": 32,
-            "hiddenDim": 32,
+            "inputDim": 64,
+            "hiddenDim": 64,
             "mixtures": 1
         }
     },
@@ -653,8 +713,8 @@
     },
     "scales": {
         "snowfall_sum": [
-            -0.0006103342158803214,
-            0.7984753253294438
+            -0.0006103342158806414,
+            0.7984756456494438
         ],
         "surface_net_solar_radiation_sum": [
             0.0007448988673149209,
@@ -678,7 +738,7 @@
         ],
         "total_precipitation_sum": [
             -0.0005335942090740124,
-            0.3298285929531973
+            0.6498285929531973
         ]
     }
 }

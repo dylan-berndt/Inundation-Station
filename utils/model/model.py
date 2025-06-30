@@ -141,7 +141,7 @@ class InundationGCLSTMCoder(nn.Module):
 
         for i in range(len(self.blocks)):
             convolved, state = self.blocks[i](projected, inputs.edge_index, state)
-            projected = projected + convolved
+            projected = convolved + projected
         # convolved, newState = self.block(projected, inputs.edge_index, state)
 
         batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)

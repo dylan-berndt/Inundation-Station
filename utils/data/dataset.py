@@ -263,17 +263,17 @@ class InundationData(Dataset):
             areas = [basinArea.loc[int(self.translateDict[key])]["SUB_AREA"]] + [basinArea.loc[int(basinID)]["SUB_AREA"] for basinID in upstreamBasins]
             calculatedArea = sum(areas)
             self.grdcDict[key]["Area"] = calculatedArea
-            if calculatedArea < 0:
-                print("WHAT", key, calculatedArea)
 
             normalizedStage = self.grdcDict[key]["Stage"] / calculatedArea
             self.grdcDict[key]["Mean"] = torch.mean(normalizedStage).item()
             self.grdcDict[key]["Deviation"] = torch.std(normalizedStage).item()
 
+            print(self.grdcDict[key]["Catchment"])
+
             areaDiff = abs(calculatedArea - self.grdcDict[key]["Catchment"]) / self.grdcDict[key]["Catchment"]
             self.grdcDict[key]["AreaDiff"] = areaDiff
 
-            if areaDiff > 0.2 and config.excludeDiffBasins:
+            if (areaDiff > 0.2 or self.grdcDict[key]["Catchment"] < 0) and config.excludeDiffBasins:
                 del self.grdcDict[key]
                 continue
 
@@ -378,7 +378,7 @@ class InundationData(Dataset):
         riverTime = riverTime[offset: offset + self.config.history + self.config.future]
 
         targetMean, targetDev = self.grdcDict[grdcID]["Mean"], self.grdcDict[grdcID]["Deviation"]
-        targetScale = self.grdcDict[grdcID]["Area"]
+        targetScale = self.grdcDict[grdcID]["Catchment"]
 
         dischargeHistory = riverStage[offset: offset + self.config.history] / targetScale
         dischargeFuture = riverStage[offset + self.config.history: offset + self.config.history + self.config.future] / targetScale
