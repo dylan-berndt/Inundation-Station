@@ -6,7 +6,7 @@ import torch_geometric_temporal.nn as tgnn
 
 from torch_geometric.nn import GINEConv, GPSConv, global_add_pool, global_mean_pool, global_max_pool
 from torch_geometric.utils import scatter
-from torch_geometric.nn.attention import PerformerAttention
+from torch_geometric.nn.attention import PerformerAttention, PerformerProjection
 import torch_geometric.transforms as T
 
 from .modules import *
@@ -41,8 +41,6 @@ class RedrawProjection:
 class GPS(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
-        
-        self.nodeEmbedding = nn.Embedding()
 
         self.convs = nn.ModuleList()
         for _ in range(config.layers):
@@ -56,28 +54,109 @@ class GPS(nn.Module):
 
         self.redraw = RedrawProjection(self.convs, redraw_interval=1000)
 
-    def forward(self, inputs, edges, context=None):
+    def forward(self, inputs, edges):
         for conv in self.convs:
             inputs = conv(inputs, edges)
 
 
-class InundationPerformerBlock(nn.Module):
+class PerformerEncoder(PerformerAttention):
     def __init__(self, config: Config):
-        super().__init__()
-        self.gps = None
+        super().__init__(**config)
+        self.config = config
+
+        self.ln = nn.LayerNorm(config.channels)
+
+    def forward(self, inputs, mask=None):
+        B, N, *_ = inputs.shape
+        q, k, v = self.q(inputs), self.k(inputs), self.v(inputs)
+        # Reshape and permute q, k and v to proper shape
+        # (B, N, num_heads * head_channels) to (b, num_heads, n, head_channels)
+        q, k, v = map(
+            lambda t: t.reshape(B, N, self.heads, self.head_channels).permute(
+                0, 2, 1, 3), (q, k, v))
+        if mask is not None:
+            mask = mask[:, None, :, None]
+            v.masked_fill_(~mask, 0.)
+        out = self.fast_attn(q, k, v)
+        out = out.permute(0, 2, 1, 3).reshape(B, N, -1)
+        out = self.attn_out(out)
+        out = self.ln(out + inputs)
+        out = self.dropout(out)
+        return out
 
 
-class InundationPerformerCoder(nn.Module):
+class PerformerDecoder(PerformerAttention):
     def __init__(self, config: Config):
-        super().__init__()
+        super().__init__(**config)
+        self.config = config
+
+        self.ln1 = nn.LayerNorm(config.channels)
+        self.ln2 = nn.LayerNorm(config.channels)
+
+        self.q2 = nn.Linear(config.channels, config.inner_channels)
+        self.k2 = nn.Linear(config.channels, config.inner_channels)
+        self.v2 = nn.Linear(config.channels, config.inner_channels)
         
+        self.attn2 = PerformerProjection(config.head_channels, config.kernel)
+
+        self.out2 = nn.Linear(config.inner_channels, config.channels)
+
+    def forward(self, inputs, context, mask=None):
+        B, N, *_ = inputs.shape
+        q, k, v = self.q(inputs), self.k(inputs), self.v(inputs)
+        # Reshape and permute q, k and v to proper shape
+        # (B, N, num_heads * head_channels) to (b, num_heads, n, head_channels)
+        q, k, v = map(
+            lambda t: t.reshape(B, N, self.heads, self.head_channels).permute(
+                0, 2, 1, 3), (q, k, v))
+        if mask is not None:
+            mask = mask[:, None, :, None]
+            v.masked_fill_(~mask, 0.)
+        out = self.fast_attn(q, k, v)
+        out = out.permute(0, 2, 1, 3).reshape(B, N, -1)
+        out = self.attn_out(out)
+        out = self.ln1(out + inputs)
+        out = self.dropout(out)
+
+        q2, k2, v2 = self.q2(out), self.k2(context), self.v2(context)
+        q2, k2, v2 = map(
+            lambda t: t.reshape(B, N, self.heads, self.head_channels).permute(
+                0, 2, 1, 3), (q2, k2, v2))
+        if mask is not None:
+            v.masked_fill_(~mask, 0.)
+        out = self.attn2(q, k, v)
+        out = out.permute(0, 2, 1, 3).reshape(B, N, -1)
+        out = self.attn_out(out)
+        out = self.ln2(out + inputs)
+        out = self.dropout(out)
+        return out
+
+
+class Performer(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.config = config
+
+        self.encoder = nn.Sequential(
+            PerformerEncoder(config.block) for _ in range(config.blocks)
+        )
+
+        self.decoder = nn.Sequential(
+            PerformerDecoder(config.block) for _ in range(config.blocks)
+        )
+
     def forward(self, inputs, context=None):
         pass
 
 
-class InundationPerformerStation(nn.Module):
+class InundationGPSTStation(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
+        
+        self.spatialEncoder = GPS(config.encoder)
+        self.spatialDecoder = GPS(config.decoder)
+
+        self.performer = Performer(config.performer)
 
     def forward(self, inputs):
         pass
