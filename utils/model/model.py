@@ -42,6 +42,13 @@ class GPS(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
 
+        self.walk = T.RandomWalkPE(config.pe)
+
+        self.fc = nn.Sequential(
+            nn.Linear(config.pe + config.channels, config.channels),
+            nn.ReLU()
+        )
+
         self.convs = nn.ModuleList()
         for _ in range(config.layers):
             seq = nn.Sequential(
@@ -52,11 +59,16 @@ class GPS(nn.Module):
             conv = GPSConv(config.channels, GINEConv(seq), heads=config.heads, attn_type="performer")
             self.convs.append(conv)
 
+        # idk if this actually does anything
         self.redraw = RedrawProjection(self.convs, redraw_interval=1000)
 
-    def forward(self, inputs, edges):
+    def forward(self, inputs, edges, batch):
+        inputs = self.walk(inputs, edge_index=edges)
+
         for conv in self.convs:
-            inputs = conv(inputs, edges)
+            inputs = conv(inputs, edges, batch)
+
+        return inputs
 
 
 class PerformerEncoder(PerformerAttention):
@@ -141,25 +153,73 @@ class Performer(nn.Module):
             PerformerEncoder(config.block) for _ in range(config.blocks)
         )
 
-        self.decoder = nn.Sequential(
+        self.decoder = nn.ModuleList([
             PerformerDecoder(config.block) for _ in range(config.blocks)
-        )
+        ])
 
-    def forward(self, inputs, context=None):
-        pass
+    def forward(self, source, target):
+        source = self.encoder(source)
+        
+        for i in range(len(self.decoder)):
+            target = self.decoder[i](target, source)
+
+        return source, target
+    
+
+class InundationGPSTCoder(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.config = config
+
+        self.config = config
+
+        self.basinProjection = DualProjection(config.basinProjection)
+        self.riverProjection = DualProjection(config.riverProjection)
+
+        self.gps = GPS(config.gps)
+
+    def forward(self, inputs):
+        inputShape = inputs.era5.shape
+        basinContinuous = inputs.basinContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
+        basinDiscrete = inputs.basinDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
+        basinProjected = torch.concatenate([inputs.era5, basinContinuous], dim=-1)
+        projected = self.basinProjection(basinProjected, basinDiscrete)
+
+        projected = self.gps(projected, inputs.edge_index, inputs.batch)
+
+        # batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)
+        # sampledBasin = projected[batchIndices, :, :]
+
+        sampledBasin = scatter(projected, inputs.batch, dim=0, reduce='mean')
+
+        riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
+        riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
+        riverProjected = torch.concatenate([sampledBasin, riverContinuous], dim=-1)
+        series = self.riverProjection(riverProjected, riverDiscrete)
+
+        return series
 
 
 class InundationGPSTStation(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
         
-        self.spatialEncoder = GPS(config.encoder)
-        self.spatialDecoder = GPS(config.decoder)
+        self.encoder = InundationGPSTCoder(config.encoder)
+        self.decoder = InundationGPSTCoder(config.decoder)
 
         self.performer = Performer(config.performer)
 
+        self.head = CMAL(**config.head)
+
     def forward(self, inputs):
-        pass
+        past, future = inputs
+
+        pastEncoded = self.encoder(past)
+        futureEncoded = self.decoder(future)
+
+        past, future = self.performer(pastEncoded, futureEncoded)
+        past, future = self.head(past), self.head(future)
+        return past, future
 
 
 class InundationGCLSTMBlock(nn.Module):
