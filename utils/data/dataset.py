@@ -362,6 +362,9 @@ class InundationData(Dataset):
 
         print("Static Input Scaling Complete")
 
+        print("Total Useable Gauges:", len(grdcDict.keys()))
+        print("Total Useable Basins:", len(pfafDict.keys()))
+
     def __len__(self):
         return len(self.indexMap)
 
