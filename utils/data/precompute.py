@@ -152,8 +152,8 @@ def era5Scales(path, basinATLAS):
         for column in df.columns:
             if column in ["total_precipitation_sum", "snowfall_sum", "surface_net_solar_radiation_sum"]:
                 df[column] = np.log10(np.clip(df[column], 1e-6, np.inf))
-            if "_sum" in column:
-                df[column] = df[column] / area
+            # if "_sum" in column:
+            #     df[column] = df[column] / area
             if column not in scales:
                 mean = df[column].mean()
                 m2 = ((df[column] - mean) ** 2).sum()

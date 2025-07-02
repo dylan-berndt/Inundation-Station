@@ -175,8 +175,8 @@ class InundationData(Dataset):
                     continue
                 mean, std = self.era5Scales[column]
                 scale = 1
-                if "_sum" in column:
-                    scale = area
+                # if "_sum" in column:
+                #     scale = area
 
                 basinData[column] = ((basinData[column] / scale) - mean) / std
 
