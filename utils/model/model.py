@@ -6,7 +6,8 @@ import torch_geometric_temporal.nn as tgnn
 
 from torch_geometric.nn import GINEConv, GPSConv, global_add_pool, global_mean_pool, global_max_pool
 from torch_geometric.utils import scatter
-from torch_geometric.nn.attention import PerformerAttention, PerformerProjection
+from torch_geometric.nn.attention import PerformerAttention
+from torch_geometric.nn.attention.performer import PerformerProjection
 import torch_geometric.transforms as T
 
 from .modules import *
@@ -64,6 +65,8 @@ class GPS(nn.Module):
 
     def forward(self, inputs, edges, batch):
         inputs = self.walk(inputs, edge_index=edges)
+
+        # TODO: FC for PE and Inputs, Fix walk
 
         for conv in self.convs:
             inputs = conv(inputs, edges, batch)
@@ -136,7 +139,7 @@ class PerformerDecoder(PerformerAttention):
                 0, 2, 1, 3), (q2, k2, v2))
         if mask is not None:
             v.masked_fill_(~mask, 0.)
-        out = self.attn2(q, k, v)
+        out = self.attn2(q2, k2, v2)
         out = out.permute(0, 2, 1, 3).reshape(B, N, -1)
         out = self.attn_out(out)
         out = self.ln2(out + inputs)
@@ -149,8 +152,10 @@ class Performer(nn.Module):
         super().__init__()
         self.config = config
 
+        self.pe = PositionalEncoding(**config.pe)
+
         self.encoder = nn.Sequential(
-            PerformerEncoder(config.block) for _ in range(config.blocks)
+            *[PerformerEncoder(config.block) for _ in range(config.blocks)]
         )
 
         self.decoder = nn.ModuleList([
@@ -158,6 +163,8 @@ class Performer(nn.Module):
         ])
 
     def forward(self, source, target):
+        source, target = self.pe(source), self.pe(target)
+
         source = self.encoder(source)
         
         for i in range(len(self.decoder)):

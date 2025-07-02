@@ -254,6 +254,8 @@ class InundationData(Dataset):
             self.upstreamStructure[node] = newEdges
         print("Structure Tensors Complete")
 
+        allTargets = []
+
         self.lengths = []
         self.indexMap = []
         self.offsetMap = []
@@ -267,6 +269,7 @@ class InundationData(Dataset):
             normalizedStage = self.grdcDict[key]["Stage"] / calculatedArea
             self.grdcDict[key]["Mean"] = torch.mean(normalizedStage).item()
             self.grdcDict[key]["Deviation"] = torch.std(normalizedStage).item()
+            allTargets.extend(normalizedStage.cpu().numpy().tolist())
 
             print(self.grdcDict[key]["Catchment"])
 
@@ -285,6 +288,8 @@ class InundationData(Dataset):
             self.indexMap.extend([key] * seriesLength)
             self.offsetMap.extend(range(seriesLength))
             self.graphSizes.extend([len(self.upstreamBasins[translateDict[key]])] * seriesLength)
+
+        self.targetMean = np.mean(allTargets)
 
         print("Index Mapping Complete")
 
