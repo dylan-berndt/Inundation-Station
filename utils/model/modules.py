@@ -136,8 +136,8 @@ class BatchNorm(nn.Module):
         return self.bn(x.permute(0, 2, 1)).permute(0, 2, 1)
     
 
-def identity(*args, **kwargs):
-    return args, kwargs
+def identity(x):
+    return x
 
 
 class CMALLoss(nn.Module):
