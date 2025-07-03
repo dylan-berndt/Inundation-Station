@@ -134,11 +134,17 @@ class BatchNorm(nn.Module):
 
     def forward(self, x):
         return self.bn(x.permute(0, 2, 1)).permute(0, 2, 1)
+    
+
+def identity(*args, **kwargs):
+    return args, kwargs
 
 
 class CMALLoss(nn.Module):
-    def __init__(self):
+    def __init__(self, reduction=None):
         super().__init__()
+
+        self.reduction = identity if reduction is None else torch.mean
 
     def forward(self, yPred, yTrue):
         m, b, t, p = yPred
@@ -148,7 +154,7 @@ class CMALLoss(nn.Module):
         logWeights = torch.log(p + 1e-4)
 
         result = torch.logsumexp(logWeights + logLike, dim=2)
-        result = -torch.mean(torch.sum(result, dim=1))
+        result = -self.reduction(torch.sum(result, dim=1))
         return result
 
 
