@@ -637,6 +637,7 @@ class FloodHubData(InundationData):
 
         size = past.basinArea
         mult = size / torch.sum(size)
+        mult = mult.unsqueeze(1).unsqueeze(2)
 
         past.era5 = torch.sum(past.era5 * mult, dim=0)
         past.basinContinuous = torch.sum(past.basinContinuous * mult, dim=0)
