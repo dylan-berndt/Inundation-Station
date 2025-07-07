@@ -3,11 +3,11 @@
     "batchSize": 8,
     "nodesPerBatch": 2000,
     "dataSplit": 0.8,
-    "history": 120,
+    "history": 60,
     "future": 7,
     "seed": 1234,
     "excludeDiffBasins": true,
-    "appendDimensionPath": "encoder.block.gnn.hidden_channels",
+    "appendDimensionPath": "encoder.block.gatLSTM.outChannels",
     "encoder": {
         "basinProjection": {
             "discreteDim": 4,
@@ -20,16 +20,15 @@
             "outputDim": 64
         },
         "block": {
-            "gnn": {
-                "in_channels": 64,
-                "hidden_channels": 64,
-                "num_layers": 3
-            },
-            "lstm": {
-                "input_size": 64,
-                "hidden_size": 64,
-                "num_layers": 2
-            }
+            "gatLSTM": {
+                "gat": {
+                    "in_channels": 64,
+                    "hidden_channels": 64,
+                    "num_layers": 3
+                },
+                "inChannels": 64,
+                "outChannels": 64
+            }  
         },
         "blocks": 2,
         "head": {
@@ -54,16 +53,15 @@
             "outputDim": 64
         },
         "block": {
-            "gnn": {
-                "in_channels": 64,
-                "hidden_channels": 64,
-                "num_layers": 3
-            },
-            "lstm": {
-                "input_size": 64,
-                "hidden_size": 64,
-                "num_layers": 2
-            }
+            "gatLSTM": {
+                "gat": {
+                    "in_channels": 64,
+                    "hidden_channels": 64,
+                    "num_layers": 3
+                },
+                "inChannels": 64,
+                "outChannels": 64
+            }  
         },
         "blocks": 2,
         "head": {
@@ -654,5 +652,35 @@
             "gdp_ud_usu": true,
             "hdi_ix_sav": true
         }
+    },
+    "scales": {
+        "snowfall_sum": [
+            -4.072710044566031,
+            1.6494228981969525
+        ],
+        "surface_net_solar_radiation_sum": [
+            4.953171020211435,
+            2.373834258674718
+        ],
+        "surface_net_thermal_radiation_sum": [
+            -2839124.0034197937,
+            3646440.1610396034
+        ],
+        "surface_pressure": [
+            98868.1277767776,
+            7367.001172567359
+        ],
+        "temperature_2m_max": [
+            266.2545415568104,
+            23.63919733860082
+        ],
+        "temperature_2m_min": [
+            261.1023446943042,
+            20.165729331477518
+        ],
+        "total_precipitation_sum": [
+            -3.5755518563468565,
+            1.3771862634257181
+        ]
     }
 }

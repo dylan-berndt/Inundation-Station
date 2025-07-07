@@ -626,6 +626,13 @@ class GraphSizeSampler(Sampler):
 
     def __len__(self):
         return len(self.batches)
+    
+
+class FloodData(Data):
+    def __cat_dim__(self, key, value, *args, **kwargs):
+        if key in ["basinContinuous", "basinDiscrete", "riverContinuous", "riverDiscrete", "dischargeFuture", "dischargeHistory", "thresholds", "era5"]:
+            return None
+        return super().__cat_dim__(key, value, *args, **kwargs)
 
 
 class FloodHubData(InundationData):
@@ -649,6 +656,10 @@ class FloodHubData(InundationData):
         del future.basinDiscrete
         del past.edge_index
         del future.edge_index
+
+        past = FloodData().update(past)
+        future = FloodData().update(future)
+        targets = FloodData().update(targets)
 
         return (past, future), targets
 

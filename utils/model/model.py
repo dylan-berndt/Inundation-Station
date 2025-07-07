@@ -9,6 +9,7 @@ from torch_geometric.utils import scatter
 from torch_geometric.nn.attention import PerformerAttention
 from torch_geometric.nn.attention.performer import PerformerProjection
 import torch_geometric.transforms as T
+from torch_geometric.nn.inits import glorot, zeros
 
 from .modules import *
 from ..config import *
@@ -320,44 +321,110 @@ class InundationGCLSTMStation(nn.Module):
         forecast, _ = self.decoder(future, (hidden, cell))
 
         return hindcast, forecast
+    
 
+class GATLSTM(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.config = config
+
+        self.convs = nn.ModuleList([gnn.GAT(**config.gat) for _ in range(4)])
+        self.weights = nn.ParameterList([nn.Parameter(torch.Tensor(config.inChannels, config.outChannels))])
+        self.biases = nn.ParameterList([nn.Parameter(torch.Tensor(1, config.outChannels))])
+
+        for i in range(len(self.weights)):
+            glorot(self.weights[i])
+        
+        for i in range(len(self.biases)):
+            zeros(self.biases[i])
+
+    def _set_hidden_state(self, X, H):
+        if H is None:
+            H = torch.zeros(X.shape[0], self.config.outChannels).to(X.device)
+        return H
+
+    def _set_cell_state(self, X, C):
+        if C is None:
+            C = torch.zeros(X.shape[0], self.config.outChannels).to(X.device)
+        return C
+    
+    def _calculate_input_gate(self, X, edge_index, edge_weight, H, C, lambda_max):
+        I = torch.matmul(X, self.weights[0])
+        I = I + self.convs[0](H, edge_index, edge_weight, lambda_max=lambda_max)
+        I = I + self.biases[0]
+        I = torch.sigmoid(I)
+        return I
+
+    def _calculate_forget_gate(self, X, edge_index, edge_weight, H, C, lambda_max):
+        F = torch.matmul(X, self.weights[1])
+        F = F + self.convs[1](H, edge_index, edge_weight, lambda_max=lambda_max)
+        F = F + self.biases[1]
+        F = torch.sigmoid(F)
+        return F
+
+    def _calculate_cell_state(self, X, edge_index, edge_weight, H, C, I, F, lambda_max):
+        T = torch.matmul(X, self.weights[2])
+        T = T + self.convs[2](H, edge_index, edge_weight, lambda_max=lambda_max)
+        T = T + self.biases[2]
+        T = torch.tanh(T)
+        C = F * C + I * T
+        return C
+
+    def _calculate_output_gate(self, X, edge_index, edge_weight, H, C, lambda_max):
+        O = torch.matmul(X, self.weights[3])
+        O = O + self.convs[3](H, edge_index, edge_weight, lambda_max=lambda_max)
+        O = O + self.biases[3]
+        O = torch.sigmoid(O)
+        return O
+    
+    def _calculate_hidden_state(self, O, C):
+        H = O * torch.tanh(C)
+        return H
+
+    def forward(self, X, edge_index, edge_weight=None, H=None, C=None, lambda_max=None):
+        H = self._set_hidden_state(X, H)
+        C = self._set_cell_state(X, C)
+        I = self._calculate_input_gate(X, edge_index, edge_weight, H, C, lambda_max)
+        F = self._calculate_forget_gate(X, edge_index, edge_weight, H, C, lambda_max)
+        C = self._calculate_cell_state(X, edge_index, edge_weight, H, C, I, F, lambda_max)
+        O = self._calculate_output_gate(X, edge_index, edge_weight, H, C, lambda_max)
+        H = self._calculate_hidden_state(O, C)
+        return H, C
+    
 
 class InundationBlock(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
         self.config = config
 
-        self.basinGNN = gnn.models.GCN(**config.gnn)
-
-        self.lstm = nn.LSTM(**config.lstm, batch_first=True)
+        self.gatLSTM = GATLSTM(config.gatLSTM)
 
         self.hiddenBridge = nn.Sequential(
-            nn.Linear(config.lstm.hidden_size, config.lstm.hidden_size),
+            nn.Linear(config.gatLSTM.outChannels, config.gatLSTM.outChannels),
             nn.Tanh()
         )
-        self.cellBridge = nn.Linear(config.lstm.hidden_size, config.lstm.hidden_size)
+        self.cellBridge = nn.Linear(config.gatLSTM.outChannels, config.gatLSTM.outChannels)
 
-        self.ln1 = nn.LayerNorm(config.lstm.hidden_size)
-        self.ln2 = nn.LayerNorm(config.gnn.hidden_channels)
+        self.fc = nn.Sequential(
+            nn.Linear(config.gatLSTM.outChannels, config.gatLSTM.outChannels * 2),
+            nn.ReLU(),
+            nn.Linear(config.gatLSTM.outChannels * 2, config.gatLSTM.outChannels),
+            nn.Dropout(config.dropout)
+        )
 
-    def forward(self, inputs, edges, state=None):
-        steps = []
-        for timestep in range(inputs.shape[1]):
-            step = self.basinGNN(inputs[:, timestep], edges)
-            steps.append(step)
-            del step
+    def forward(self, inputs, edges, state=(None, None)):
+        batch, sequence, _ = inputs.shape
+        hidden, cell = state
 
-        graph = torch.stack(steps, dim=1)
-        graph = self.ln2(graph)
-
-        series, (hidden, cell) = self.lstm(graph, state)
-        series = self.ln1(series)
-
-        del steps
+        outputs = []
+        for t in range(sequence):
+            hidden, cell = self.gatLSTM(inputs[:, t], edges, None, hidden, cell)
+            outputs.append(hidden)
 
         hidden, cell = self.hiddenBridge(hidden), self.cellBridge(cell)
-
-        return series, (hidden, cell)
+        
+        outputs = self.fc(torch.stack(outputs, dim=1))
+        return outputs, (hidden, cell)
 
 
 class InundationBlockCoder(nn.Module):
