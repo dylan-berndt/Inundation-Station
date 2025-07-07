@@ -350,21 +350,21 @@ class GATLSTM(nn.Module):
     
     def _calculate_input_gate(self, X, edge_index, edge_weight, H, C, lambda_max):
         I = torch.matmul(X, self.weights[0])
-        I = I + self.convs[0](H, edge_index, edge_weight, lambda_max=lambda_max)
+        I = I + self.convs[0](H, edge_index, edge_weight)
         I = I + self.biases[0]
         I = torch.sigmoid(I)
         return I
 
     def _calculate_forget_gate(self, X, edge_index, edge_weight, H, C, lambda_max):
         F = torch.matmul(X, self.weights[1])
-        F = F + self.convs[1](H, edge_index, edge_weight, lambda_max=lambda_max)
+        F = F + self.convs[1](H, edge_index, edge_weight)
         F = F + self.biases[1]
         F = torch.sigmoid(F)
         return F
 
     def _calculate_cell_state(self, X, edge_index, edge_weight, H, C, I, F, lambda_max):
         T = torch.matmul(X, self.weights[2])
-        T = T + self.convs[2](H, edge_index, edge_weight, lambda_max=lambda_max)
+        T = T + self.convs[2](H, edge_index, edge_weight)
         T = T + self.biases[2]
         T = torch.tanh(T)
         C = F * C + I * T
@@ -372,7 +372,7 @@ class GATLSTM(nn.Module):
 
     def _calculate_output_gate(self, X, edge_index, edge_weight, H, C, lambda_max):
         O = torch.matmul(X, self.weights[3])
-        O = O + self.convs[3](H, edge_index, edge_weight, lambda_max=lambda_max)
+        O = O + self.convs[3](H, edge_index, edge_weight)
         O = O + self.biases[3]
         O = torch.sigmoid(O)
         return O
