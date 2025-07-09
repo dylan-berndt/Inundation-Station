@@ -329,8 +329,8 @@ class GATLSTM(nn.Module):
         self.config = config
 
         self.convs = nn.ModuleList([gnn.GAT(**config.gat) for _ in range(4)])
-        self.weights = nn.ParameterList([nn.Parameter(torch.Tensor(config.inChannels, config.outChannels))])
-        self.biases = nn.ParameterList([nn.Parameter(torch.Tensor(1, config.outChannels))])
+        self.weights = nn.ParameterList([nn.Parameter(torch.Tensor(config.inChannels, config.outChannels)) for _ in range(4)])
+        self.biases = nn.ParameterList([nn.Parameter(torch.Tensor(1, config.outChannels)) for _ in range(4)])
 
         for i in range(len(self.weights)):
             glorot(self.weights[i])
@@ -397,7 +397,7 @@ class InundationBlock(nn.Module):
         super().__init__()
         self.config = config
 
-        self.gatLSTM = GATLSTM(config.gatLSTM)
+        self.gatLSTM = GATLSTM(config.gatLSTM).to("cuda")
 
         self.hiddenBridge = nn.Sequential(
             nn.Linear(config.gatLSTM.outChannels, config.gatLSTM.outChannels),
@@ -409,7 +409,7 @@ class InundationBlock(nn.Module):
             nn.Linear(config.gatLSTM.outChannels, config.gatLSTM.outChannels * 2),
             nn.ReLU(),
             nn.Linear(config.gatLSTM.outChannels * 2, config.gatLSTM.outChannels),
-            nn.Dropout(config.dropout)
+            nn.Dropout(config.gatLSTM.dropout)
         )
 
     def forward(self, inputs, edges, state=(None, None)):
@@ -439,7 +439,7 @@ class InundationBlockCoder(nn.Module):
 
         self.head = CMAL(**config.head)
 
-    def forward(self, inputs, state=None):
+    def forward(self, inputs, state=(None, None)):
         inputShape = inputs.era5.shape
         basinContinuous = inputs.basinContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
         basinDiscrete = inputs.basinDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
@@ -450,8 +450,10 @@ class InundationBlockCoder(nn.Module):
             coded, newState = block(projected, inputs.edge_index, state)
             projected = projected + coded
 
-        batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)
-        sampledBasin = projected[batchIndices, :, :]
+        # batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)
+        # sampledBasin = projected[batchIndices, :, :]
+
+        sampledBasin = scatter(projected, inputs.batch, dim=0, reduce='max')
 
         riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
         riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
