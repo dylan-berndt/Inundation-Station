@@ -31,7 +31,7 @@
                 "dropout": 0.2
             }
         },
-        "blocks": 2,
+        "blocks": 3,
         "head": {
             "inputDim": 64,
             "hiddenDim": 256,
@@ -65,7 +65,7 @@
                 "dropout": 0.2
             }
         },
-        "blocks": 2,
+        "blocks": 3,
         "head": {
             "inputDim": 64,
             "hiddenDim": 256,
