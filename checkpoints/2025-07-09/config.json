@@ -3,7 +3,7 @@
     "batchSize": 128,
     "nodesPerBatch": 1000,
     "dataSplit": 0.8,
-    "history": 60,
+    "history": 365,
     "future": 7,
     "seed": 1234,
     "excludeDiffBasins": true,
@@ -12,12 +12,42 @@
         "basinProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 128,
+            "continuousDim": 284,
+            "discreteRange": [
+                18,
+                125,
+                23,
+                16,
+                13,
+                15,
+                755,
+                14,
+                417,
+                16
+            ]
         },
         "riverProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 128,
+            "continuousDim": 386,
+            "discreteRange": [
+                2,
+                9,
+                7,
+                9,
+                15,
+                100,
+                16,
+                13,
+                10,
+                12,
+                118,
+                8,
+                82,
+                14
+            ]
         },
         "lstm": {
             "input_size": 128,
@@ -38,12 +68,42 @@
         "basinProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 128,
+            "continuousDim": 284,
+            "discreteRange": [
+                18,
+                125,
+                23,
+                16,
+                13,
+                15,
+                755,
+                14,
+                417,
+                16
+            ]
         },
         "riverProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 128,
+            "continuousDim": 386,
+            "discreteRange": [
+                2,
+                9,
+                7,
+                9,
+                15,
+                100,
+                16,
+                13,
+                10,
+                12,
+                118,
+                8,
+                82,
+                14
+            ]
         },
         "lstm": {
             "input_size": 128,

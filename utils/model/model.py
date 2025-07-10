@@ -665,6 +665,8 @@ class FloodCoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
+        self.config = config
+
         self.basinProjection = SingleProjection(config.basinProjection)
         self.riverProjection = DualProjection(config.riverProjection)
 
@@ -691,6 +693,8 @@ class FloodCoder(nn.Module):
 class FloodHub(nn.Module):
     def __init__(self, config):
         super().__init__()
+
+        self.config = config
 
         self.encoder = FloodCoder(config.encoder)
 

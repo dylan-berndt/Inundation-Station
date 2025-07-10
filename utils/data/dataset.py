@@ -646,11 +646,19 @@ class FloodHubData(InundationData):
         mult = size / torch.sum(size)
         mult = mult.unsqueeze(1).unsqueeze(2)
 
+        # print((past.basinContinuous * mult).shape)
+        # print((past.basinContinuous * mult.squeeze(1)).shape)
+        # print(torch.sum(past.basinContinuous * mult.squeeze(1), dim=0).shape)
+
         past.era5 = torch.sum(past.era5 * mult, dim=0)
-        past.basinContinuous = torch.sum(past.basinContinuous * mult, dim=0)
+        past.basinContinuous = torch.sum(past.basinContinuous * mult.squeeze(1), dim=0)
+
+        # print(past.basinContinuous.shape)
 
         future.era5 = torch.sum(future.era5 * mult, dim=0)
-        future.basinContinuous = torch.sum(future.basinContinuous * mult, dim=0)
+        future.basinContinuous = torch.sum(future.basinContinuous * mult.squeeze(1), dim=0)
+
+        # print(future.basinContinuous.shape)
 
         del past.basinDiscrete
         del future.basinDiscrete
@@ -660,6 +668,20 @@ class FloodHubData(InundationData):
         past = FloodData().update(past)
         future = FloodData().update(future)
         targets = FloodData().update(targets)
+
+        # p = past.to_dict()
+        # for key, value in p.items():
+        #     try:
+        #         print(key, value.shape)
+        #     except:
+        #         pass
+        #
+        # f = past.to_dict()
+        # for key, value in f.items():
+        #     try:
+        #         print(key, value.shape)
+        #     except:
+        #         pass
 
         return (past, future), targets
 
