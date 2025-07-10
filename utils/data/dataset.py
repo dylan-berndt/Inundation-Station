@@ -35,11 +35,7 @@ class BasinData(Data):
 def calculateReturnPeriods(df, periods=None, maximums=True):
     periods = [1, 2, 5, 10] if periods is None else periods
     df = df.copy()
-    # Results in negative year values but still works ig
-    # TODO: Double check year calculations
-    start = datetime(2000, 1, 1).timestamp()
-    secondsInYear = 60 * 60 * 24 * 365
-    df['year'] = df['YYYY-MM-DD'].apply(lambda x: (x - start) // secondsInYear).astype(int)
+    df['year'] = df['YYYY-MM-DD'].apply(lambda x: datetime.fromtimestamp(x)).dt.year.astype(int)
 
     annuals = df.groupby('year')[' Value'].max().dropna() if maximums else df.groupby('year')[' Value'].min().dropna()
     logMax = np.log10(annuals)
@@ -48,8 +44,8 @@ def calculateReturnPeriods(df, periods=None, maximums=True):
 
     returnVals = {}
     for period in periods:
-        exceedanceProbability = 1 - 1 / period
-        q = pearson3.ppf(exceedanceProbability, skew, loc=mean, scale=std)
+        nonExceedanceProbability = max(1 - 1 / period, 0.01)
+        q = pearson3.ppf(nonExceedanceProbability, skew, loc=mean, scale=std)
         returnVals[period] = 10 ** q
 
     return returnVals
