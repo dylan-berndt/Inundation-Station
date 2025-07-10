@@ -3,7 +3,7 @@
     "batchSize": 128,
     "nodesPerBatch": 1000,
     "dataSplit": 0.8,
-    "history": 365,
+    "history": 60,
     "future": 7,
     "seed": 1234,
     "excludeDiffBasins": true,

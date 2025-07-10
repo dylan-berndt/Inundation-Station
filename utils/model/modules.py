@@ -229,7 +229,7 @@ class CMALRecall(nn.Module):
         self.direction = direction
         self.numBatches = batches
         self.batches = []
-        self.sampleNum=sample
+        self.sampleNum = sample
         super().__init__()
 
     def forward(self, yPred, yTrue, thresholds, *args, **kwargs):
@@ -262,18 +262,26 @@ class CMALRecall(nn.Module):
     
 
 class CMALNSE(nn.Module):
-    def __init__(self):
+    def __init__(self, batches=100):
         super().__init__()
+        self.numBatches = batches
+        self.batches = []
 
-    def forward(self, yPred, yTrue, means, deviations, *args, **kwargs):
-        yPred = CMAL.median(yPred)
+    def forward(self, yPred, yTrue, means, *args, **kwargs):
+        self.batches.append((yPred, yTrue, means))
 
-        # yPred = yPred * deviations + means
-        # yTrue = yTrue * deviations + means
+        if len(self.batches) > self.numBatches:
+            self.batches = self.batches[1:]
+
+        yPredC = [torch.cat([batch[0][i] for batch in self.batches], dim=0) for i in range(4)]
+        yTrueC = torch.cat([batch[1] for batch in self.batches], dim=0)
+        meansC = torch.cat([batch[2] for batch in self.batches], dim=0)
+
+        yPredV = CMAL.median(yPredC)
 
         # NSE per gauge
-        numerator = torch.sum(torch.pow(yTrue - yPred, 2), dim=1)
-        denominator = torch.sum(torch.pow(yTrue - means, 2), dim=1)
+        numerator = torch.sum(torch.pow(yTrueC - yPredV, 2), dim=1)
+        denominator = torch.sum(torch.pow(yTrueC - meansC, 2), dim=1)
 
         value = 1 - (numerator / denominator)
         value = torch.nan_to_num(value, 0, 0, 0)

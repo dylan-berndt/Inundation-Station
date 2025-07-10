@@ -1,73 +1,117 @@
 {
     "path": "data",
-    "batchSize": 8,
-    "nodesPerBatch": 2000,
+    "batchSize": 128,
+    "nodesPerBatch": 1000,
     "dataSplit": 0.8,
     "history": 60,
     "future": 7,
     "seed": 1234,
     "excludeDiffBasins": true,
-    "appendDimensionPath": "encoder.block.gatLSTM.outChannels",
+    "appendDimensionPath": "encoder.lstm.hidden_size",
     "encoder": {
         "basinProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 64
+            "outputDim": 128,
+            "continuousDim": 284,
+            "discreteRange": [
+                18,
+                125,
+                23,
+                16,
+                13,
+                15,
+                755,
+                14,
+                417,
+                16
+            ]
         },
         "riverProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 64
+            "outputDim": 128,
+            "continuousDim": 386,
+            "discreteRange": [
+                2,
+                9,
+                7,
+                9,
+                15,
+                100,
+                16,
+                13,
+                10,
+                12,
+                118,
+                8,
+                82,
+                14
+            ]
         },
-        "block": {
-            "gatLSTM": {
-                "gat": {
-                    "in_channels": 64,
-                    "hidden_channels": 64,
-                    "num_layers": 3
-                },
-                "inChannels": 64,
-                "outChannels": 64,
-                "dropout": 0.2
-            }
+        "lstm": {
+            "input_size": 128,
+            "hidden_size": 128,
+            "num_layers": 2
         },
-        "blocks": 3,
         "head": {
-            "inputDim": 64,
+            "inputDim": 128,
             "hiddenDim": 256,
             "mixtures": 12
         }
     },
     "bridge": {
-        "in_features": 64,
-        "out_features": 64
+        "in_features": 128,
+        "out_features": 128
     },
     "decoder": {
         "basinProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 64
+            "outputDim": 128,
+            "continuousDim": 284,
+            "discreteRange": [
+                18,
+                125,
+                23,
+                16,
+                13,
+                15,
+                755,
+                14,
+                417,
+                16
+            ]
         },
         "riverProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 64
+            "outputDim": 128,
+            "continuousDim": 386,
+            "discreteRange": [
+                2,
+                9,
+                7,
+                9,
+                15,
+                100,
+                16,
+                13,
+                10,
+                12,
+                118,
+                8,
+                82,
+                14
+            ]
         },
-        "block": {
-            "gatLSTM": {
-                "gat": {
-                    "in_channels": 64,
-                    "hidden_channels": 64,
-                    "num_layers": 3
-                },
-                "inChannels": 64,
-                "outChannels": 64,
-                "dropout": 0.2
-            }
+        "lstm": {
+            "input_size": 128,
+            "hidden_size": 128,
+            "num_layers": 2
         },
-        "blocks": 3,
         "head": {
-            "inputDim": 64,
+            "inputDim": 128,
             "hiddenDim": 256,
             "mixtures": 12
         }
@@ -666,7 +710,7 @@
         ],
         "surface_net_thermal_radiation_sum": [
             -2839124.0034197937,
-            3646440.1610396034
+            3643240.1610396034
         ],
         "surface_pressure": [
             98868.1277767776,
