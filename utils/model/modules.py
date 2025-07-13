@@ -280,12 +280,10 @@ class CMALNSE(nn.Module):
         yPredV = CMAL.median(yPredC)
 
         # NSE per gauge
-        numerator = torch.sum(torch.pow(yTrueC - yPredV, 2), dim=1)
-        denominator = torch.sum(torch.pow(yTrueC - meansC, 2), dim=1)
+        numerator = torch.sum(torch.pow(yTrueC - yPredV, 2))
+        denominator = torch.sum(torch.pow(yTrueC - meansC, 2))
 
         value = 1 - (numerator / denominator)
-        value = torch.nan_to_num(value, 0, 0, 0)
-        value = torch.mean(value)
         return value.item()
     
 
