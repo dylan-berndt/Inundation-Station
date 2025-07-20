@@ -45,37 +45,42 @@ def plotMetrics(floodHubMetrics, modelMetrics, config):
 
     labels = ["1 Year Return Period", "2 Year Return Period", "5 Year Return Period", "10 Year Return Period"]
 
-    for i in range(4):
-        plt.subplot(1, 4, i + 1)
-        plt.title(labels[i])
-        modelF1 = model["f1"][:, :, i].T
-        modelF1 = [box[~np.isnan(box)] for box in modelF1]
-        modelPlot = plt.boxplot(modelF1, positions=np.arange(7) + 0.25, widths=0.5, label="GNN Model", patch_artist=True)
-        floodF1 = flood["f1"][:, :, i].T
-        floodF1 = [box[~np.isnan(box)] for box in floodF1]
-        floodPlot = plt.boxplot(floodF1, positions=np.arange(7) - 0.25, widths=0.5, label="Flood Hub", patch_artist=True)
-        plt.ylim(0, 1)
+    def plotMetric(m, name):
+        for i in range(4):
+            plt.subplot(1, 4, i + 1)
+            plt.title(labels[i])
+            modelF1 = model[m][:, :, i].T
+            modelF1 = [box[~np.isnan(box)] for box in modelF1]
+            modelPlot = plt.boxplot(modelF1, positions=np.arange(7) + 0.25, widths=0.5, label="GNN Model", patch_artist=True)
+            floodF1 = flood[m][:, :, i].T
+            floodF1 = [box[~np.isnan(box)] for box in floodF1]
+            floodPlot = plt.boxplot(floodF1, positions=np.arange(7) - 0.25, widths=0.5, label="Flood Hub", patch_artist=True)
+            plt.ylim(0, 1)
 
-        for patch in modelPlot['boxes']:
-            patch.set_facecolor('tab:blue')
+            for patch in modelPlot['boxes']:
+                patch.set_facecolor('tab:blue')
 
-        for line in modelPlot['medians']:
-            line.set_color('black')
+            for line in modelPlot['medians']:
+                line.set_color('black')
 
-        for patch in floodPlot['boxes']:
-            patch.set_facecolor('tab:orange')
+            for patch in floodPlot['boxes']:
+                patch.set_facecolor('tab:orange')
 
-        for line in floodPlot['medians']:
-            line.set_color('black')
+            for line in floodPlot['medians']:
+                line.set_color('black')
 
-        plt.legend()
+            plt.legend()
 
-        plt.grid()
-        plt.xticks(np.arange(7), np.arange(7) + 1)
-        plt.xlabel("Forecast Horizon")
-        plt.ylabel("F1 Score")
+            plt.grid()
+            plt.xticks(np.arange(7), np.arange(7) + 1)
+            plt.xlabel("Forecast Horizon")
+            plt.ylabel(name)
 
-    plt.show()
+        plt.show()
+
+    plotMetric("f1", "F1 Score")
+    plotMetric("recall", "Recall")
+    plotMetric("precision", "Precision")
 
     modelNSE = 1 - np.array([modelMetrics[name]["nseNum"] / modelMetrics[name]["nseDenom"] for name in modelMetrics])
     modelCDF = np.array([np.sum(modelNSE < (threshold / 1000)) / len(modelNSE) for threshold in range(-1000, 1000)])
