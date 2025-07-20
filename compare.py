@@ -41,13 +41,13 @@ def plotMetrics(floodHubMetrics, modelMetrics, config):
         flood["precision"][i] = precision
         flood["f1"][i] = f1
 
-    plt.figure(figsize=(20, 12))
+    plt.figure(figsize=(10, 6))
 
     labels = ["1 Year Return Period", "2 Year Return Period", "5 Year Return Period", "10 Year Return Period"]
 
     def plotMetric(m, name):
-        for i in range(4):
-            plt.subplot(1, 4, i + 1)
+        for i in range(1, 4):
+            plt.subplot(1, 3, i)
             plt.title(labels[i])
             modelF1 = model[m][:, :, i].T
             modelF1 = [box[~np.isnan(box)] for box in modelF1]
@@ -88,7 +88,7 @@ def plotMetrics(floodHubMetrics, modelMetrics, config):
     floodHubNSE = 1 - np.array([floodHubMetrics[name]["nseNum"] / floodHubMetrics[name]["nseDenom"] for name in floodHubMetrics])
     floodHubCDF = np.array([np.sum(floodHubNSE < (threshold / 1000)) / len(floodHubNSE) for threshold in range(-1000, 1000)])
 
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(6, 3))
     plt.plot(np.arange(-1000, 1000) / 1000, modelCDF, label="GNN Model")
     plt.plot(np.arange(-1000, 1000) / 1000, floodHubCDF, label="Flood Hub")
     plt.title("Cumulative Distribution of NSE")
