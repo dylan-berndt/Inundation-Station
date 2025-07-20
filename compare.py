@@ -1,4 +1,5 @@
 from utils import *
+import copy
 
 
 def plotMetrics(floodHubMetrics, modelMetrics, config):
@@ -7,7 +8,7 @@ def plotMetrics(floodHubMetrics, modelMetrics, config):
         "precision": np.zeros([len(modelMetrics), config.future, 4]),
         "f1": np.zeros([len(modelMetrics), config.future, 4])
     }
-    flood = model.copy()
+    flood = copy.deepcopy(model)
 
     nodeX = np.zeros([len(modelMetrics), 4])
 
@@ -44,8 +45,8 @@ def plotMetrics(floodHubMetrics, modelMetrics, config):
 
     labels = ["1 Year Return Period", "2 Year Return Period", "5 Year Return Period", "10 Year Return Period"]
 
-    for i in range(1, 4):
-        plt.subplot(1, 3, i)
+    for i in range(4):
+        plt.subplot(1, 4, i + 1)
         plt.title(labels[i])
         modelF1 = model["f1"][:, :, i].T
         modelF1 = [box[~np.isnan(box)] for box in modelF1]
