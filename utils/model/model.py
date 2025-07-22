@@ -44,7 +44,7 @@ class GPS(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
 
-        self.walk = T.RandomWalkPE(config.pe)
+        self.walk = T.AddRandomWalkPE(config.pe)
 
         self.fc = nn.Sequential(
             nn.Linear(config.pe + config.channels, config.channels),
@@ -61,10 +61,12 @@ class GPS(nn.Module):
             conv = GPSConv(config.channels, GINEConv(seq), heads=config.heads, attn_type="performer")
             self.convs.append(conv)
 
-        # idk if this actually does anything
         self.redraw = RedrawProjection(self.convs, redraw_interval=1000)
 
     def forward(self, inputs, edges, batch):
+        if self.training:
+            self.redraw.redraw_projections()
+
         inputs = self.walk(inputs, edge_index=edges)
 
         # TODO: FC for PE and Inputs, Fix walk
