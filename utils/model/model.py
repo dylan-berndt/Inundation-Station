@@ -11,6 +11,8 @@ from torch_geometric.nn.attention.performer import PerformerProjection
 import torch_geometric.transforms as T
 from torch_geometric.nn.inits import glorot, zeros
 
+from torch_geometric.data import Batch
+
 from .modules import *
 from ..config import *
 
@@ -44,8 +46,6 @@ class GPS(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
 
-        self.walk = T.AddRandomWalkPE(config.pe)
-
         self.fc = nn.Sequential(
             nn.Linear(config.pe + config.channels, config.channels),
             nn.ReLU()
@@ -66,10 +66,6 @@ class GPS(nn.Module):
     def forward(self, inputs, edges, batch):
         if self.training:
             self.redraw.redraw_projections()
-
-        inputs = self.walk(inputs, edge_index=edges)
-
-        # TODO: FC for PE and Inputs, Fix walk
 
         for conv in self.convs:
             inputs = conv(inputs, edges, batch)
@@ -183,24 +179,32 @@ class InundationGPSTCoder(nn.Module):
 
         self.config = config
 
+        self.walk = T.AddRandomWalkPE(config.pe)
+
+        config.basinProjection.continuousDim += config.pe
+
         self.basinProjection = DualProjection(config.basinProjection)
         self.riverProjection = DualProjection(config.riverProjection)
 
         self.gps = GPS(config.gps)
 
     def forward(self, inputs):
+        dataList = inputs.to_data_list()
+        dataList = [self.walk(d) for d in dataList]
+        inputs = Batch.from_data_list(dataList)
+
         inputShape = inputs.era5.shape
         basinContinuous = inputs.basinContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
         basinDiscrete = inputs.basinDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
-        basinProjected = torch.concatenate([inputs.era5, basinContinuous], dim=-1)
+        basinProjected = torch.concatenate([inputs.era5, basinContinuous, inputs.pe], dim=-1)
         projected = self.basinProjection(basinProjected, basinDiscrete)
 
         projected = self.gps(projected, inputs.edge_index, inputs.batch)
 
-        # batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)
-        # sampledBasin = projected[batchIndices, :, :]
+        batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)
+        sampledBasin = projected[batchIndices, :, :]
 
-        sampledBasin = scatter(projected, inputs.batch, dim=0, reduce='mean')
+        # sampledBasin = scatter(projected, inputs.batch, dim=0, reduce='mean')
 
         riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
         riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
