@@ -82,7 +82,18 @@ Begins training. Make sure to specify the chosen config, model, and dataset. Fir
 
 ![Inundation Station-Page-2 drawio(2)](https://github.com/user-attachments/assets/290145ab-cd8d-4d62-9c60-a0c83a23795e)
 
+## Preliminary Results
 
+![NSE Curves](https://github.com/dylan-berndt/Inundation-Station/blob/91674b2b5cad0cc01cdddbbe18c8c3a0eae408d0/results/NSE%20Curves.png)
+
+### F1 Scores by Forecast Horizon and Event Likelihood
+![F1 Scores](https://github.com/dylan-berndt/Inundation-Station/blob/818c85077007a68cc3de43405923da31bb917d94/results/F1%20Scores.png)
+
+### Precision Scores by Forecast Horizon and Event Likelihood
+![Precision Scores](https://github.com/dylan-berndt/Inundation-Station/blob/818c85077007a68cc3de43405923da31bb917d94/results/Precision%20Scores.png)
+
+### Recall Scores by Forecast Horizon and Event Likelihood
+![Recall Scores](https://github.com/dylan-berndt/Inundation-Station/blob/818c85077007a68cc3de43405923da31bb917d94/results/Recall%20Scores.png)
 
 
 

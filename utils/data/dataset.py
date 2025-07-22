@@ -38,7 +38,7 @@ def calculateReturnPeriods(df, periods=None, maximums=True):
     df['year'] = df['YYYY-MM-DD'].apply(lambda x: datetime.fromtimestamp(x)).dt.year.astype(int)
 
     annuals = df.groupby('year')[' Value'].max().dropna() if maximums else df.groupby('year')[' Value'].min().dropna()
-    logMax = np.log10(annuals)
+    logMax = np.log10(np.clip(annuals, 1e-6, np.inf))
 
     skew, mean, std = logMax.skew(), logMax.mean(), logMax.std()
 
@@ -48,7 +48,7 @@ def calculateReturnPeriods(df, periods=None, maximums=True):
         q = pearson3.ppf(nonExceedanceProbability, skew, loc=mean, scale=std)
         returnVals[period] = 10 ** q
 
-    return returnVals
+    return returnVals.values()
 
 
 def defaultNoise(minNoise, maxNoise):
@@ -106,7 +106,7 @@ class InundationData(Dataset):
             df = pd.read_csv(filePath, encoding="latin1", comment="#", delimiter=";")
 
             df['YYYY-MM-DD'] = pd.to_datetime(df['YYYY-MM-DD'], errors="coerce")
-            # Convert to days as integers, makes things cleaner later probably
+            # Convert to days as integers, makes things cleaner later probably (UGH)
             df["YYYY-MM-DD"] = df["YYYY-MM-DD"].apply(lambda x: x.timestamp() // 86400).astype(int)
 
             # Constrain to ERA5 data range
@@ -125,6 +125,9 @@ class InundationData(Dataset):
                 del grdcDict[riverID]
                 continue
 
+            thresholdDF = df.copy()
+            thresholdDF["YYYY-MM-DD"] = thresholdDF["YYYY-MM-DD"].apply(lambda x: x * 86400)
+
             xMin, xMax = np.nanmin(x), np.nanmax(x)
             yMin, yMax = np.nanmin(y), np.nanmax(y)
             linspace = np.linspace(xMin, xMax, int(xMax - xMin))
@@ -137,7 +140,7 @@ class InundationData(Dataset):
 
             grdcDict[riverID]["Time"] = linspace
             grdcDict[riverID]["Stage"] = torch.tensor(values, dtype=torch.float32)
-            grdcDict[riverID]["Thresholds"] = calculateReturnPeriods(df)
+            grdcDict[riverID]["Thresholds"] = calculateReturnPeriods(thresholdDF)
             grdcDict[riverID]["Mean"] = np.mean(values)
             grdcDict[riverID]["Deviation"] = np.std(values)
 

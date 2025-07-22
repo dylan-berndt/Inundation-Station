@@ -12,19 +12,49 @@
         "basinProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 64
+            "outputDim": 64,
+            "continuousDim": 284,
+            "discreteRange": [
+                18,
+                125,
+                23,
+                16,
+                13,
+                15,
+                755,
+                14,
+                417,
+                16
+            ]
         },
         "riverProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 64
+            "outputDim": 64,
+            "continuousDim": 322,
+            "discreteRange": [
+                2,
+                9,
+                7,
+                9,
+                15,
+                100,
+                16,
+                13,
+                10,
+                12,
+                118,
+                8,
+                82,
+                14
+            ]
         },
         "block": {
             "gatLSTM": {
                 "gat": {
                     "in_channels": 64,
                     "hidden_channels": 64,
-                    "num_layers": 3
+                    "num_layers": 4
                 },
                 "inChannels": 64,
                 "outChannels": 64,
@@ -34,8 +64,8 @@
         "blocks": 2,
         "head": {
             "inputDim": 64,
-            "hiddenDim": 256,
-            "mixtures": 12
+            "hiddenDim": 128,
+            "mixtures": 1
         }
     },
     "bridge": {
@@ -46,19 +76,49 @@
         "basinProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 64
+            "outputDim": 64,
+            "continuousDim": 284,
+            "discreteRange": [
+                18,
+                125,
+                23,
+                16,
+                13,
+                15,
+                755,
+                14,
+                417,
+                16
+            ]
         },
         "riverProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 64
+            "outputDim": 64,
+            "continuousDim": 322,
+            "discreteRange": [
+                2,
+                9,
+                7,
+                9,
+                15,
+                100,
+                16,
+                13,
+                10,
+                12,
+                118,
+                8,
+                82,
+                14
+            ]
         },
         "block": {
             "gatLSTM": {
                 "gat": {
                     "in_channels": 64,
                     "hidden_channels": 64,
-                    "num_layers": 3
+                    "num_layers": 4
                 },
                 "inChannels": 64,
                 "outChannels": 64,
@@ -68,8 +128,8 @@
         "blocks": 2,
         "head": {
             "inputDim": 64,
-            "hiddenDim": 256,
-            "mixtures": 12
+            "hiddenDim": 128,
+            "mixtures": 1
         }
     },
     "variables": {

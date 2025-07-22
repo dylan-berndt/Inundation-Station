@@ -455,7 +455,7 @@ class InundationBlockCoder(nn.Module):
         # batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)
         # sampledBasin = projected[batchIndices, :, :]
 
-        sampledBasin = scatter(projected, inputs.batch, dim=0, reduce='mean')
+        sampledBasin = scatter(projected, inputs.batch, dim=0, reduce='max')
 
         riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
         riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
