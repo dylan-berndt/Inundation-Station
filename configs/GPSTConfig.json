@@ -7,36 +7,23 @@
     "future": 7,
     "seed": 1234,
     "excludeDiffBasins": true,
-    "appendDimensionPath": "encoder.block.gnn.out_channels",
+    "appendDimensionPath": "encoder.gps.channels",
     "encoder": {
         "pe": 64,
         "basinProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 32
+            "outputDim": 64
         },
         "riverProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 32
+            "outputDim": 64
         },
-        "block": {
-            "dropout": 0.2,
-            "gnn": {
-                "in_channels": 32,
-                "out_channels": 32,
-                "K": 3
-            },
-            "bridge": {
-                "in_features": 32,
-                "out_features": 32
-            }
-        },
-        "blocks": 2,
-        "head": {
-            "inputDim": 32,
-            "hiddenDim": 32,
-            "mixtures": 1
+        "gps": {
+            "channels": 64,
+            "heads": 4,
+            "layers": 4
         }
     },
     "decoder": {
@@ -44,40 +31,34 @@
         "basinProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 32
+            "outputDim": 64
         },
         "riverProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 32
+            "outputDim": 64
         },
-        "block": {
-            "dropout": 0.2,
-            "gnn": {
-                "in_channels": 32,
-                "out_channels": 32,
-                "K": 3
-            },
-            "bridge": {
-                "in_features": 32,
-                "out_features": 32
-            }
-        },
-        "blocks": 2,
-        "head": {
-            "inputDim": 32,
-            "hiddenDim": 32,
-            "mixtures": 1
+        "gps": {
+            "channels": 64,
+            "heads": 4,
+            "layers": 4
         }
     },
     "performer": {
         "pe": {
-            
+            "d_model": 64
         },
         "block": {
-
+            "channels": 64,
+            "heads": 4,
+            "head_channels": 16
         },
         "blocks": 6
+    },
+    "head": {
+        "inputDim": 32,
+        "hiddenDim": 32,
+        "mixtures": 1
     },
     "variables": {
         "river": {

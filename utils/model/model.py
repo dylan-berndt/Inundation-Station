@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import torch_geometric.nn as gnn
 import torch_geometric_temporal.nn as tgnn
 
-from torch_geometric.nn import GINEConv, GPSConv, global_add_pool, global_mean_pool, global_max_pool
+from torch_geometric.nn import GINEConv, GINConv, GPSConv, global_add_pool, global_mean_pool, global_max_pool
 from torch_geometric.utils import scatter
 from torch_geometric.nn.attention import PerformerAttention
 from torch_geometric.nn.attention.performer import PerformerProjection
@@ -46,11 +46,6 @@ class GPS(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
 
-        self.fc = nn.Sequential(
-            nn.Linear(config.pe + config.channels, config.channels),
-            nn.ReLU()
-        )
-
         self.convs = nn.ModuleList()
         for _ in range(config.layers):
             seq = nn.Sequential(
@@ -58,7 +53,7 @@ class GPS(nn.Module):
                 nn.ReLU(),
                 nn.Linear(config.channels, config.channels)
             )
-            conv = GPSConv(config.channels, GINEConv(seq), heads=config.heads, attn_type="performer")
+            conv = GPSConv(config.channels, GINConv(seq), heads=config.heads, attn_type="performer")
             self.convs.append(conv)
 
         self.redraw = RedrawProjection(self.convs, redraw_interval=1000)
@@ -68,7 +63,7 @@ class GPS(nn.Module):
             self.redraw.redraw_projections()
 
         for conv in self.convs:
-            inputs = conv(inputs, edges, batch)
+            inputs = conv(inputs, edge_index=edges, batch=batch)
 
         return inputs
 
@@ -107,13 +102,15 @@ class PerformerDecoder(PerformerAttention):
         self.ln1 = nn.LayerNorm(config.channels)
         self.ln2 = nn.LayerNorm(config.channels)
 
-        self.q2 = nn.Linear(config.channels, config.inner_channels)
-        self.k2 = nn.Linear(config.channels, config.inner_channels)
-        self.v2 = nn.Linear(config.channels, config.inner_channels)
-        
-        self.attn2 = PerformerProjection(config.head_channels, config.kernel)
+        innerChannels = config.head_channels * config.heads
 
-        self.out2 = nn.Linear(config.inner_channels, config.channels)
+        self.q2 = nn.Linear(config.channels, innerChannels)
+        self.k2 = nn.Linear(config.channels, innerChannels)
+        self.v2 = nn.Linear(config.channels, innerChannels)
+        
+        self.attn2 = PerformerProjection(config.head_channels, nn.ReLU())
+
+        self.out2 = nn.Linear(innerChannels, config.channels)
 
     def forward(self, inputs, context, mask=None):
         B, N, *_ = inputs.shape
@@ -179,7 +176,7 @@ class InundationGPSTCoder(nn.Module):
 
         self.config = config
 
-        self.walk = T.AddRandomWalkPE(config.pe)
+        self.walk = T.AddRandomWalkPE(config.pe, attr_name='pe')
 
         config.basinProjection.continuousDim += config.pe
 
@@ -196,7 +193,9 @@ class InundationGPSTCoder(nn.Module):
         inputShape = inputs.era5.shape
         basinContinuous = inputs.basinContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
         basinDiscrete = inputs.basinDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
-        basinProjected = torch.concatenate([inputs.era5, basinContinuous, inputs.pe], dim=-1)
+
+        pe = inputs.pe.unsqueeze(1).expand(-1, inputShape[1], -1)
+        basinProjected = torch.concatenate([inputs.era5, basinContinuous, pe], dim=-1)
         projected = self.basinProjection(basinProjected, basinDiscrete)
 
         projected = self.gps(projected, inputs.edge_index, inputs.batch)
