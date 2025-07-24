@@ -198,7 +198,11 @@ class InundationGPSTCoder(nn.Module):
         basinProjected = torch.concatenate([inputs.era5, basinContinuous, pe], dim=-1)
         projected = self.basinProjection(basinProjected, basinDiscrete)
 
-        projected = self.gps(projected, inputs.edge_index, inputs.batch)
+        steps = []
+        for t in range(inputShape[1]):
+            g = self.gps(projected[:, t], inputs.edge_index, inputs.batch)
+            steps.append(g)
+        projected = torch.stack(steps, dim=1)
 
         batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)
         sampledBasin = projected[batchIndices, :, :]

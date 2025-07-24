@@ -1,16 +1,23 @@
-from utils import *
+import numpy as np
+from utils.config import Config
 import copy
+import json
+import matplotlib.pyplot as plt
+import os
 
 
 def plotMetrics(floodHubMetrics, modelMetrics, config):
     model = {
         "recall": np.zeros([len(modelMetrics), config.future, 4]),
         "precision": np.zeros([len(modelMetrics), config.future, 4]),
-        "f1": np.zeros([len(modelMetrics), config.future, 4])
+        "f1": np.zeros([len(modelMetrics), config.future, 4]),
+        "y": np.zeros([len(modelMetrics), 4])
     }
     flood = copy.deepcopy(model)
 
     nodeX = np.zeros([len(modelMetrics), 4])
+    modelY = np.zeros([len(modelMetrics), 4])
+    floodY = np.zeros([len(modelMetrics), 4])
 
     for i, name in enumerate(modelMetrics):
         nodeX[i, :] = modelMetrics[name]["nodes"]
@@ -23,6 +30,10 @@ def plotMetrics(floodHubMetrics, modelMetrics, config):
         precision = tp / (tp + fp)
 
         f1 = 2 * recall * precision / (recall + precision)
+
+        f1Mask = ~np.isnan(f1)
+        f1Val = np.where(f1Mask, f1, 0)
+        modelY[i, :] = np.nan_to_num(np.sum(f1Val, axis=0) / np.sum(f1Mask, axis=0), nan=0)
 
         model["recall"][i] = recall
         model["precision"][i] = precision
@@ -37,6 +48,10 @@ def plotMetrics(floodHubMetrics, modelMetrics, config):
 
         f1 = 2 * recall * precision / (recall + precision)
 
+        f1Mask = ~np.isnan(f1)
+        f1Val = np.where(f1Mask, f1, 0)
+        floodY[i, :] = np.nan_to_num(np.sum(f1Val, axis=0) / np.sum(f1Mask, axis=0), nan=0)
+
         flood["recall"][i] = recall
         flood["precision"][i] = precision
         flood["f1"][i] = f1
@@ -46,8 +61,8 @@ def plotMetrics(floodHubMetrics, modelMetrics, config):
     labels = ["1 Year Return Period", "2 Year Return Period", "5 Year Return Period", "10 Year Return Period"]
 
     def plotMetric(m, name):
-        for i in range(1, 4):
-            plt.subplot(1, 3, i)
+        for i in range(4):
+            plt.subplot(1, 4, i + 1)
             plt.title(labels[i])
             modelF1 = model[m][:, :, i].T
             modelF1 = [box[~np.isnan(box)] for box in modelF1]
@@ -56,6 +71,15 @@ def plotMetrics(floodHubMetrics, modelMetrics, config):
             floodF1 = [box[~np.isnan(box)] for box in floodF1]
             floodPlot = plt.boxplot(floodF1, positions=np.arange(7) - 0.25, widths=0.5, label="Flood Hub", patch_artist=True)
             plt.ylim(0, 1)
+
+            mod = model[m][:, :, i]
+            flh = flood[m][:, :, i]
+            modMask = ~np.isnan(mod)
+            modVal = np.where(modMask, mod, 0)
+            flhMask = ~np.isnan(flh)
+            flhVal = np.where(flhMask, flh, 0)
+            plt.plot(np.arange(7), np.sum(modVal, axis=0) / np.sum(modMask, axis=0), c='tab:blue')
+            plt.plot(np.arange(7), np.sum(flhVal, axis=0) / np.sum(flhMask, axis=0), c='tab:orange')
 
             for patch in modelPlot['boxes']:
                 patch.set_facecolor('tab:blue')
@@ -81,6 +105,31 @@ def plotMetrics(floodHubMetrics, modelMetrics, config):
     plotMetric("f1", "F1 Score")
     plotMetric("recall", "Recall")
     plotMetric("precision", "Precision")
+
+    plt.figure(figsize=(10, 6))
+    for i in range(4):
+        plt.subplot(1, 4, i + 1)
+        plt.title(labels[i])
+        currentX = nodeX[:, i]
+        currentModelY = modelY[:, i]
+        currentFloodY = floodY[:, i]
+        plt.scatter(currentX, currentModelY, alpha=0.5, c='tab:blue')
+        plt.scatter(currentX, currentFloodY, alpha=0.5, c='tab:orange')
+        plt.ylim(0, 1)
+
+        modelFit = np.polyfit(currentX, currentModelY, 1)
+        plt.plot(np.arange(np.max(currentX)), modelFit[0] * np.arange(np.max(currentX)) + modelFit[1], c='tab:blue', label="GNN Correlation")
+
+        floodFit = np.polyfit(currentX, currentFloodY, 1)
+        plt.plot(np.arange(np.max(currentX)), floodFit[0] * np.arange(np.max(currentX)) + floodFit[1], c='tab:orange', label="Flood Hub Correlation")
+
+        plt.legend()
+
+        plt.grid()
+        plt.xlabel("Total Upstream Basin Nodes")
+        plt.ylabel("F1 Score")
+
+    plt.show()
 
     modelNSE = 1 - np.array([modelMetrics[name]["nseNum"] / modelMetrics[name]["nseDenom"] for name in modelMetrics])
     modelCDF = np.array([np.sum(modelNSE < (threshold / 1000)) / len(modelNSE) for threshold in range(-1000, 1000)])
