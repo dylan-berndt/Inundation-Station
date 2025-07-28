@@ -15,6 +15,10 @@ class GNNLSTM(nn.Module):
         super().__init__()
         self.config = config
 
+        if "gnnType" not in config:
+            config.gnnType = "GAT"
+            config.gat = config.gnn
+
         self.convs = nn.ModuleList([gnnResolution[config.gnnType](**config.gnn) for _ in range(4)])
         self.weights = nn.ParameterList([nn.Parameter(torch.Tensor(config.inChannels, config.outChannels)) for _ in range(4)])
         self.biases = nn.ParameterList([nn.Parameter(torch.Tensor(1, config.outChannels)) for _ in range(4)])
@@ -83,6 +87,9 @@ class InundationBlock(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
         self.config = config
+
+        if "gnnLSTM" not in config:
+            config.gnnLSTM = config.gatLSTM
 
         self.gatLSTM = GNNLSTM(config.gnnLSTM).to("cuda")
 
