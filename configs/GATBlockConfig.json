@@ -20,8 +20,9 @@
             "outputDim": 64
         },
         "block": {
-            "gatLSTM": {
-                "gat": {
+            "gnnLSTM": {
+                "gnnType": "GAT",
+                "gnn": {
                     "in_channels": 64,
                     "hidden_channels": 64,
                     "num_layers": 3
@@ -54,8 +55,9 @@
             "outputDim": 64
         },
         "block": {
-            "gatLSTM": {
-                "gat": {
+            "gnnLSTM": {
+                "gnnType": "GAT",
+                "gnn": {
                     "in_channels": 64,
                     "hidden_channels": 64,
                     "num_layers": 3

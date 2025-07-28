@@ -1,5 +1,5 @@
 import numpy as np
-from utils.config import Config
+# from utils.config import Config
 import copy
 import json
 import matplotlib.pyplot as plt
@@ -150,13 +150,21 @@ def plotMetrics(floodHubMetrics, modelMetrics, config):
 
 floodHubPath = os.path.join("checkpoints", "2025-07-09")
 modelPath = os.path.join("checkpoints", "2025-07-16")
-config = Config().load(os.path.join(modelPath, "config.json"))
+# config = Config().load(os.path.join(modelPath, "config.json"))
 
 with open(os.path.join(floodHubPath, "metrics.json")) as file:
     floodHubMetrics = json.load(file)
 
 with open(os.path.join(modelPath, "metrics.json")) as file:
     modelMetrics = json.load(file)
+
+
+class Ugh:
+    pass
+
+
+config = Ugh()
+config.future = 7
 
 
 plotMetrics(floodHubMetrics, modelMetrics, config)

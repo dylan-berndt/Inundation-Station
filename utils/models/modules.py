@@ -5,6 +5,59 @@ import math
 
 from scipy.stats import pearsonr
 
+from torch_geometric.nn import GINEConv, GINConv, GPSConv, global_add_pool, global_mean_pool, global_max_pool
+from torch_geometric.nn.attention import PerformerAttention
+from torch_geometric.nn.attention.performer import PerformerProjection
+
+
+class RedrawProjection:
+    def __init__(self, model: torch.nn.Module,
+                 redraw_interval=None):
+        self.model = model
+        self.redraw_interval = redraw_interval
+        self.num_last_redraw = 0
+
+    def redraw_projections(self):
+        if not self.model.training or self.redraw_interval is None:
+            return
+        if self.num_last_redraw >= self.redraw_interval:
+            fast_attentions = [
+                module for module in self.model.modules()
+                if isinstance(module, PerformerAttention)
+            ]
+            for fast_attention in fast_attentions:
+                fast_attention.redraw_projection_matrix()
+            self.num_last_redraw = 0
+            return
+        self.num_last_redraw += 1
+
+
+class GPS(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        self.convs = nn.ModuleList()
+        for _ in range(config.layers):
+            seq = nn.Sequential(
+                nn.Linear(config.channels, config.channels),
+                nn.ReLU(),
+                nn.Linear(config.channels, config.channels)
+            )
+            conv = GPSConv(config.channels, GINConv(seq), heads=config.heads, attn_type=config.attn_type)
+            self.convs.append(conv)
+
+            if config.attn_type == "performer":
+                self.redraw = RedrawProjection(self.convs, redraw_interval=1000)
+
+    def forward(self, inputs, edges, edge_weight=None):
+        if self.training and self.config.attn_type == "performer":
+            self.redraw.redraw_projections()
+
+        for conv in self.convs:
+            inputs = conv(inputs, edge_index=edges)
+
+        return inputs
+
 
 class IndexedPositionalEncoding(nn.Module):
     def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000, batch_first=False):

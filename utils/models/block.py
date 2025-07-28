@@ -7,12 +7,15 @@ from torch_geometric.nn.inits import glorot, zeros
 from torch_geometric.utils import scatter
 
 
-class GATLSTM(nn.Module):
+gnnResolution = {"GAT": gnn.GAT, "GPS": GPS}
+
+
+class GNNLSTM(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
         self.config = config
 
-        self.convs = nn.ModuleList([gnn.GAT(**config.gat) for _ in range(4)])
+        self.convs = nn.ModuleList([gnnResolution[config.gnnType](**config.gnn) for _ in range(4)])
         self.weights = nn.ParameterList([nn.Parameter(torch.Tensor(config.inChannels, config.outChannels)) for _ in range(4)])
         self.biases = nn.ParameterList([nn.Parameter(torch.Tensor(1, config.outChannels)) for _ in range(4)])
 
@@ -81,19 +84,19 @@ class InundationBlock(nn.Module):
         super().__init__()
         self.config = config
 
-        self.gatLSTM = GATLSTM(config.gatLSTM).to("cuda")
+        self.gatLSTM = GNNLSTM(config.gnnLSTM).to("cuda")
 
         self.hiddenBridge = nn.Sequential(
-            nn.Linear(config.gatLSTM.outChannels, config.gatLSTM.outChannels),
+            nn.Linear(config.gnnLSTM.outChannels, config.gnnLSTM.outChannels),
             nn.Tanh()
         )
-        self.cellBridge = nn.Linear(config.gatLSTM.outChannels, config.gatLSTM.outChannels)
+        self.cellBridge = nn.Linear(config.gnnLSTM.outChannels, config.gnnLSTM.outChannels)
 
         self.fc = nn.Sequential(
-            nn.Linear(config.gatLSTM.outChannels, config.gatLSTM.outChannels * 2),
+            nn.Linear(config.gnnLSTM.outChannels, config.gnnLSTM.outChannels * 2),
             nn.ReLU(),
-            nn.Linear(config.gatLSTM.outChannels * 2, config.gatLSTM.outChannels),
-            nn.Dropout(config.gatLSTM.dropout)
+            nn.Linear(config.gnnLSTM.outChannels * 2, config.gnnLSTM.outChannels),
+            nn.Dropout(config.gnnLSTM.dropout)
         )
 
     def forward(self, inputs, edges, state=(None, None)):
