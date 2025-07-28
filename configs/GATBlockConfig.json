@@ -7,7 +7,7 @@
     "future": 7,
     "seed": 1234,
     "excludeDiffBasins": true,
-    "appendDimensionPath": "encoder.block.gatLSTM.outChannels",
+    "appendDimensionPath": "encoder.block.gnnLSTM.outChannels",
     "encoder": {
         "basinProjection": {
             "discreteDim": 4,
