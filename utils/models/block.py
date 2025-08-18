@@ -19,7 +19,7 @@ class GNNLSTM(nn.Module):
             config.gnnType = "GAT"
             config.gat = config.gnn
 
-        self.convs = nn.ModuleList([gnnResolution[config.gnnType](**config.gnn) for _ in range(4)])
+        self.convs = nn.ModuleList([gnnResolution[config.gnnType](**config.gnn).to(device='cuda') for _ in range(4)])
         self.weights = nn.ParameterList([nn.Parameter(torch.Tensor(config.inChannels, config.outChannels)) for _ in range(4)])
         self.biases = nn.ParameterList([nn.Parameter(torch.Tensor(1, config.outChannels)) for _ in range(4)])
 

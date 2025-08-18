@@ -270,8 +270,6 @@ class InundationData(Dataset):
             self.grdcDict[key]["Deviation"] = torch.std(normalizedStage).item()
             allTargets.extend(normalizedStage.cpu().numpy().tolist())
 
-            print(self.grdcDict[key]["Catchment"])
-
             areaDiff = abs(calculatedArea - self.grdcDict[key]["Catchment"]) / self.grdcDict[key]["Catchment"]
             self.grdcDict[key]["AreaDiff"] = areaDiff
 

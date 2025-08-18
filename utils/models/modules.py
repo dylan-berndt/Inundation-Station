@@ -33,24 +33,26 @@ class RedrawProjection:
 
 
 class GPS(nn.Module):
-    def __init__(self, config):
+    def __init__(self, channels, heads, layers, attn_type):
         super().__init__()
 
+        self.attnType = attn_type
+
         self.convs = nn.ModuleList()
-        for _ in range(config.layers):
+        for _ in range(layers):
             seq = nn.Sequential(
-                nn.Linear(config.channels, config.channels),
+                nn.Linear(channels, channels),
                 nn.ReLU(),
-                nn.Linear(config.channels, config.channels)
+                nn.Linear(channels, channels)
             )
-            conv = GPSConv(config.channels, GINConv(seq), heads=config.heads, attn_type=config.attn_type)
+            conv = GPSConv(channels, GINConv(seq), heads=heads, attn_type=attn_type)
             self.convs.append(conv)
 
-            if config.attn_type == "performer":
+            if attn_type == "performer":
                 self.redraw = RedrawProjection(self.convs, redraw_interval=1000)
 
     def forward(self, inputs, edges, edge_weight=None):
-        if self.training and self.config.attn_type == "performer":
+        if self.training and self.attnType == "performer":
             self.redraw.redraw_projections()
 
         for conv in self.convs:

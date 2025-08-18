@@ -3,7 +3,7 @@
     "batchSize": 8,
     "nodesPerBatch": 2000,
     "dataSplit": 0.8,
-    "history": 120,
+    "history": 30,
     "future": 7,
     "seed": 1234,
     "excludeDiffBasins": true,
@@ -23,7 +23,7 @@
         "gps": {
             "channels": 64,
             "heads": 4,
-            "layers": 4
+            "layers": 2
         }
     },
     "decoder": {
@@ -41,7 +41,7 @@
         "gps": {
             "channels": 64,
             "heads": 4,
-            "layers": 4
+            "layers": 2
         }
     },
     "performer": {
@@ -53,7 +53,7 @@
             "heads": 4,
             "head_channels": 16
         },
-        "blocks": 6
+        "blocks": 4
     },
     "head": {
         "inputDim": 32,
