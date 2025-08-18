@@ -6,6 +6,7 @@ import numpy as np
 import seaborn as sns
 
 allValues = []
+allAreas = []
 
 for filePath in glob(os.path.join("data", "series", "GRDC", "*.txt")):
     file = open(filePath, "r")
@@ -31,12 +32,10 @@ for filePath in glob(os.path.join("data", "series", "GRDC", "*.txt")):
     print(filePath, stage.min(), stage.max(), stage.mean(), stage.std())
     stage = stage.to_numpy(dtype=np.float32)
 
-    allValues.extend(stage[stage > 0 & ~np.isnan(stage)])
+    val = stage[stage > 0 & ~np.isnan(stage)]
+    allValues.extend(val)
+    allAreas.extend([area] * len(val))
 
-sns.displot(np.array(allValues), bins=10)
-plt.grid()
-plt.show()
-
-sns.displot(np.log10(np.array(allValues) + 1e-6), bins=10)
+sns.displot(x=np.log10(np.array(allValues) + 1e-6), y=allAreas, bins=10)
 plt.grid()
 plt.show()
