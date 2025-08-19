@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 
 class Transform:
@@ -8,8 +9,8 @@ class Transform:
 
 
 def streamflowProcess(targets):
-    t = torch.log10(targets + 1e-6)
-    mean = torch.mean(t)
-    std = torch.std(t)
+    t = np.log10(targets + 1e-6)
+    mean = np.mean(t)
+    std = np.std(t)
     return Transform(lambda x: (torch.log10(x + 1e-6) - mean) / std, 
                      lambda x: torch.pow(10, (std * x) + mean) - 1e-6)

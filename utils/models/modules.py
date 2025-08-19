@@ -214,11 +214,13 @@ class CMALLoss(nn.Module):
 
 
 class CMALMSE(nn.Module):
-    def __init__(self):
+    def __init__(self, transform):
         super().__init__()
+        self.transform = transform
 
     def forward(self, yPred, yTrue):
         yPred = CMAL.median(yPred)
+        yPred = self.transform.backward(yPred)
         return torch.mean(torch.pow(yPred - yTrue, 2))
 
 
@@ -227,7 +229,6 @@ class CMALNormalizedMeanAbsolute(nn.Module):
         super().__init__()
 
     def forward(self, yPred, yTrue, deviations, *args, **kwargs):
-        yPred = CMAL.median(yPred)
         return torch.mean(torch.abs(yPred - yTrue)).item()
     
 
@@ -236,7 +237,6 @@ class CMALMeanAbsolute(nn.Module):
         super().__init__()
 
     def forward(self, yPred, yTrue, deviations, *args, **kwargs):
-        yPred = CMAL.median(yPred)
         yPred = yPred * deviations
         yTrue = yTrue * deviations
         return torch.mean(torch.abs(yPred - yTrue)).item()
@@ -256,11 +256,9 @@ class CMALPrecision(nn.Module):
         if len(self.batches) > self.numBatches:
             self.batches = self.batches[1:]
 
-        yPredC = [torch.cat([batch[0][i] for batch in self.batches], dim=0) for i in range(4)]
+        yPredV = torch.cat([batch[0] for batch in self.batches], dim=0)
         yTrueC = torch.cat([batch[1] for batch in self.batches], dim=0)
         thresholdsC = torch.cat([batch[2] for batch in self.batches], dim=0)
-
-        yPredV = CMAL.median(yPredC)
 
         threshold = thresholdsC[:, self.sampleNum].unsqueeze(-1)
 
@@ -293,11 +291,9 @@ class CMALRecall(nn.Module):
         if len(self.batches) > self.numBatches:
             self.batches = self.batches[1:]
 
-        yPredC = [torch.cat([batch[0][i] for batch in self.batches], dim=0) for i in range(4)]
+        yPredV = torch.cat([batch[0] for batch in self.batches], dim=0)
         yTrueC = torch.cat([batch[1] for batch in self.batches], dim=0)
         thresholdsC = torch.cat([batch[2] for batch in self.batches], dim=0)
-
-        yPredV = CMAL.median(yPredC)
 
         threshold = thresholdsC[:, self.sampleNum].unsqueeze(-1)
 
@@ -328,11 +324,9 @@ class CMALNSE(nn.Module):
         if len(self.batches) > self.numBatches:
             self.batches = self.batches[1:]
 
-        yPredC = [torch.cat([batch[0][i] for batch in self.batches], dim=0) for i in range(4)]
+        yPredV = torch.cat([batch[0] for batch in self.batches], dim=0)
         yTrueC = torch.cat([batch[1] for batch in self.batches], dim=0)
         meansC = torch.cat([batch[2] for batch in self.batches], dim=0)
-
-        yPredV = CMAL.median(yPredC)
 
         # NSE per gauge
         numerator = torch.sum(torch.pow(yTrueC - yPredV, 2))

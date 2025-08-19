@@ -16,6 +16,7 @@ import duckdb
 
 from .precompute import *
 from ..config import *
+from ..transforms import *
 
 from datetime import datetime
 from itertools import chain
@@ -287,6 +288,7 @@ class InundationData(Dataset):
             self.graphSizes.extend([len(self.upstreamBasins[translateDict[key]])] * seriesLength)
 
         self.targetMean = np.mean(allTargets)
+        self.transform = streamflowProcess(np.array(allTargets))
 
         print("Index Mapping Complete")
 
@@ -431,6 +433,7 @@ class InundationData(Dataset):
         riverContinuous, riverDiscrete = torch.nan_to_num(riverContinuous), torch.nan_to_num(riverDiscrete, 0, 0, 0)
         structure = torch.nan_to_num(structure, 0, 0, 0)
         dischargeHistory, dischargeFuture = torch.nan_to_num(dischargeHistory), torch.nan_to_num(dischargeFuture)
+        dischargeHistory, dischargeFuture = self.transform.forward(dischargeHistory), self.transform.forward(dischargeFuture)
 
         past = BasinData(
             era5=era5History,
