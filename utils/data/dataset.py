@@ -100,6 +100,8 @@ class InundationData(Dataset):
 
         print("GeoPandas Loaded")
 
+        # TODO: Downsample BasinATLAS parameters and RiverATLAS indices
+
         grdcPaths = glob(os.path.join(config.path, "series", "GRDC", "*.txt"))
         for f, filePath in enumerate(grdcPaths):
             fileName = os.path.basename(filePath)
@@ -155,6 +157,9 @@ class InundationData(Dataset):
         # Why in the name of our lord are there duplicate Pfafstetter IDs in the BasinATLAS data. What
         basinArea = self.basinATLAS.copy().set_index("PFAF_ID").groupby(level=0).first()
 
+        # TODO: Downsample BasinATLAS again 
+        # TODO: Downsample incoming ERA5 data
+
         sumLakes = 0
         era5Paths = glob(os.path.join(config.path, "series", "ERA5_Parquet", "*.parquet"))
         for f, filePath in enumerate(era5Paths):
@@ -199,6 +204,8 @@ class InundationData(Dataset):
         self.grdcDict = grdcDict
         self.pfafDict = pfafDict
         self.translateDict = translateDict
+
+        # TODO: Verify stability with downsampling
 
         graph = nx.DiGraph()
         for i, row in self.basinATLAS.iterrows():
@@ -253,6 +260,8 @@ class InundationData(Dataset):
             newEdges = [[nodeMap[edge[0]], nodeMap[edge[1]]] for edge in currentEdges]
             self.upstreamStructure[node] = newEdges
         print("Structure Tensors Complete")
+
+        # TODO: Verify stability with downsampling
 
         allTargets = []
 
