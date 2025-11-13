@@ -9,6 +9,8 @@ import math
 
 import numpy as np
 
+from concurrent.futures import ThreadPoolExecutor
+
 
 def getGRDCDataframe(path):
     folderGRDC = os.path.join(path, "series", "GRDC", "*.txt")
@@ -131,48 +133,51 @@ def classifyColumns(df, config, name):
     return config
 
 
-def era5Scales(path, basinATLAS):
-    iterations = 0
+def era5Scales(path, basinATLAS, downsampling=0):
     scales = {}
 
-    files = glob(os.path.join(path, "*.parquet"))
-    for f, filePath in enumerate(files):
-        df = pd.read_parquet(filePath)
+    dataDict = {}
+    areaDict = {}
+
+    era5Paths = glob(os.path.join(path, "*.parquet"))
+    era5Files = loadSeveral(era5Paths, pd.read_parquet)
+    for f, df in enumerate(era5Files):
+        filePath = era5Paths[f]
 
         iterations += len(df)
 
         pfafID = os.path.basename(filePath).split(".")[0].split("_")[-1]
+
+        if downsampling != 0:
+            pfafID = pfafID[:-downsampling]
+
         row = basinATLAS[basinATLAS["PFAF_ID"] == int(pfafID)]
         area = row.iloc[0]["SUB_AREA"]
         if area == 0:
             print(pfafID)
 
-        # I'm not actually sure this is perfectly correct
-        # for actual variance, but it doesn't really matter as long as it's close
-        for column in df.columns:
-            if column in ["total_precipitation_sum", "snowfall_sum", "surface_net_solar_radiation_sum"]:
-                df[column] = np.log10(np.clip(df[column], 1e-6, np.inf))
-            # if "_sum" in column:
-            #     df[column] = df[column] / area
-            if column not in scales:
-                mean = df[column].mean()
-                m2 = ((df[column] - mean) ** 2).sum()
-                scales[column] = mean, m2
-                continue
+        if pfafID in dataDict:
+            dataDict[pfafID] = ((dataDict[pfafID] * areaDict[pfafID]) + df) / (areaDict[pfafID] + area)
+            areaDict[pfafID] += area
+        else:
+            dataDict[pfafID] = df
+            areaDict[pfafID] = area
 
-            mean, m2 = scales[column]
+    totalDF = None
+    for pfafID, df in dataDict.items():
+        if totalDF is None:
+            totalDF = df
+        else:
+            totalDF = pd.concat([totalDF, df], axis=0)
 
-            newMean = df[column].mean()
-            newM2 = ((df[column] - mean) ** 2).sum()
+    for column in totalDF.columns:
+        if column in ["total_precipitation_sum", "snowfall_sum", "surface_net_solar_radiation_sum"]:
+            totalDF[column] = np.log10(np.clip(totalDF[column], 1e-6, np.inf))
+        mean, std = totalDF[column].mean(), totalDF[column].std()
 
-            scales[column] = scales[column][0] + newMean / iterations, scales[column][1] + newM2
-
-        print(f"\r{f}/{len(files)} ERA5 Read for Standardization", end="")
+        scales[column] = mean, std
 
     print()
-
-    for column in scales:
-        scales[column] = scales[column][0], math.sqrt(scales[column][1] / iterations)
 
     del scales["date"]
     return scales
@@ -203,4 +208,10 @@ def precomputeJoins(config):
     if "scales" not in config:
         config.scales = era5Scales(os.path.join(config.path, "series", "ERA5_Parquet"), basinATLAS)
     config.overwrite()
-        
+
+
+def loadSeveral(filePaths, loadFunc, message="ERA5"):
+    with ThreadPoolExecutor(max_workers=os.cpu_count() * 4) as executor:
+        for i, result in enumerate(executor.map(loadFunc, filePaths)):
+            print(f"\rLoaded {i + 1}/{len(filePaths)} {message} files", end="")
+            yield result

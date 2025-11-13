@@ -61,6 +61,22 @@ def defaultNoise(minNoise, maxNoise):
     return noiseData
 
 
+# Performs area-weighted averaging on continuous columns, chooses most common discrete column
+def downsampleBasinATLAS(gdf, downsampling, continuousColumns, discreteColumns):
+    gdf["groupID"] = gdf["id"].apply(lambda x: type(x)(str(x)[:-downsampling]))
+    areaWeighted = gdf.copy()
+    # TODO: Double check that SUB_AREA itself is not affected by scaling and such
+    areaWeighted[continuousColumns] = areaWeighted[continuousColumns] * areaWeighted["SUB_AREA"]
+    # Using mode is a bit dodgy here, has to do with sub-basin sizes
+    grouped = gdf.dissolve("groupID", aggfunc={key: "sum" if key in continuousColumns else "mode" 
+                                               for key in continuousColumns + discreteColumns})
+    # TODO: Double check that SUB_AREA itself is not affected by scaling and such
+    grouped[continuousColumns] = grouped[continuousColumns] / grouped["SUB_AREA"]
+
+    return grouped
+
+
+# TODO: Refactor into discrete steps to improve readability
 class InundationData(Dataset):
     def __init__(self, config, location="NA", noise=defaultNoise(0.5, 0.7)):
         self.config = config
@@ -74,7 +90,7 @@ class InundationData(Dataset):
 
         # Maps from GRDC ID to Pfafstetter ID
         translateDict = {}
-        inverseDict = {}
+        # inverseDict = {}
 
         basinContinuousColumns = [column for column in config.variables.basin if config.variables.basin[column]]
         basinDiscreteColumns = [column for column in config.variables.basin if not config.variables.basin[column]]
@@ -91,17 +107,28 @@ class InundationData(Dataset):
 
         self.riverSHP = riverSHP
 
+        # TODO: Check area thingies as a result of downsampling, likely redo
         for grdcID, row in riverSHP.iterrows():
             grdcDict[grdcID] = {"Catchment": float(row["area"])}
 
         for pfafID, row in basinSHP.iterrows():
             translateDict[row["id"]] = str(row["PFAF_ID"])
-            inverseDict[str(row["PFAF_ID"])] = row["id"]
+            # inverseDict[str(row["PFAF_ID"])] = row["id"]
 
         print("GeoPandas Loaded")
 
         # TODO: Downsample BasinATLAS parameters and RiverATLAS indices
-        # TODO: Distributed loading with multiple threads
+        if "downsampling" in config:
+            basinSHP = downsampleBasinATLAS(basinSHP, config.downsampling, basinContinuousColumns, basinDiscreteColumns)
+
+            for key, value in translateDict.items():
+                translateDict[key] = value[:-config.downsampling]
+
+            # newInverseDict = {}
+            # # Potential destruction?
+            # for key, value in inverseDict.items():
+            #     newInverseDict[key[:-config.downsampling]] = value
+
         grdcPaths = glob(os.path.join(config.path, "series", "GRDC", "*.txt"))
         for f, filePath in enumerate(grdcPaths):
             fileName = os.path.basename(filePath)
@@ -109,7 +136,7 @@ class InundationData(Dataset):
             df = pd.read_csv(filePath, encoding="latin1", comment="#", delimiter=";")
 
             df['YYYY-MM-DD'] = pd.to_datetime(df['YYYY-MM-DD'], errors="coerce")
-            # Convert to days as integers, makes things cleaner later probably (UGH)
+            # Convert to days as integers, makes things cleaner later
             df["YYYY-MM-DD"] = df["YYYY-MM-DD"].apply(lambda x: x.timestamp() // 86400).astype(int)
 
             # Constrain to ERA5 data range
@@ -154,22 +181,29 @@ class InundationData(Dataset):
         self.era5Scales = config.scales
 
         self.basinATLAS = gpd.read_file(os.path.join(config.path, "BasinATLAS_v10_shp", "BasinATLAS_v10_lev07.shp"))
-        # Why in the name of our lord are there duplicate Pfafstetter IDs in the BasinATLAS data. What
         basinArea = self.basinATLAS.copy().set_index("PFAF_ID").groupby(level=0).first()
+        
+        if "downsampling" in config:
+            self.basinATLAS = downsampleBasinATLAS(self.basinATLAS, config.downsampling, basinContinuousColumns, basinDiscreteColumns)
+            basinArea = downsampleBasinATLAS(basinArea, config.downsampling, basinContinuousColumns, basinDiscreteColumns)
 
-        # TODO: Downsample BasinATLAS again 
-        # TODO: Downsample incoming ERA5 data
-        # TODO: Distributed loading with multiple threads
+            config.scales = era5Scales(os.path.join(config.path, "series", "ERA5_Parquet"), self.basinATLAS, config.downsampling)
+
         sumLakes = 0
         era5Paths = glob(os.path.join(config.path, "series", "ERA5_Parquet", "*.parquet"))
-        for f, filePath in enumerate(era5Paths):
+        era5Files = loadSeveral(era5Paths, pd.read_parquet)
+        for f, basinData in enumerate(era5Files):
+            filePath = era5Paths[f]
             fileName = os.path.basename(filePath)
             pfafID = fileName.split("_")[3].removesuffix(".parquet")
+
+            if "downsampling" in config:
+                pfafID = pfafID[:-config.downsampling]
+
             if pfafID not in pfafDict:
                 pfafDict[pfafID] = {}
             pfafDict[pfafID]["Parquet_Path"] = filePath
 
-            basinData = pd.read_parquet(filePath)
             area = basinArea.loc[int(pfafID)]["SUB_AREA"]
             basinData = basinData.groupby(level=0).first()
 
@@ -194,10 +228,15 @@ class InundationData(Dataset):
                 basinData[0, :] = start
                 sumLakes += 1
 
-            pfafDict[pfafID]["Data"] = torch.nan_to_num(torch.tensor(basinData, dtype=torch.float32))
-            pfafDict[pfafID]["Area"] = area
+            data = torch.nan_to_num(torch.tensor(basinData, dtype=torch.float32))
 
-            print(f"\r{f + 1}/{len(era5Paths)} ERA5 files loaded", end="")
+            if "Area" in pfafDict[pfafID]:
+                currentArea = pfafDict[pfafID]["Area"]
+                pfafDict[pfafID]["Data"] = ((pfafDict[pfafID]["Data"] * currentArea) + data) / (currentArea + area)
+                pfafDict[pfafID]["Area"] += area
+            else:
+                pfafDict[pfafID]["Data"] = data
+                pfafDict[pfafID]["Area"] = area
 
         print(f"\nTotal empty basins: {sumLakes}")
 
@@ -303,7 +342,6 @@ class InundationData(Dataset):
 
         self.basinATLAS = self.basinATLAS.set_index("PFAF_ID")
 
-        # Truly life-threateningly disgusting code down here. Fuck pandas
         self.basinContinuous = self.basinATLAS[basinContinuousColumns]
         self.basinContinuous = self.basinContinuous.astype(float)
 
@@ -349,13 +387,11 @@ class InundationData(Dataset):
         self.riverContinuous = self.riverContinuous.dropna(axis=1)
         self.riverDiscrete = self.riverDiscrete.dropna(axis=1)
 
-        # This stinks
         config.encoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
         config.decoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
         config.encoder.riverProjection.continuousDim = len(self.riverContinuous.columns) + config[config.appendDimensionPath]
         config.decoder.riverProjection.continuousDim = len(self.riverContinuous.columns) + config[config.appendDimensionPath]
 
-        # Like bad
         config.encoder.basinProjection.discreteRange = self.basinDiscreteColumnRanges
         config.decoder.basinProjection.discreteRange = self.basinDiscreteColumnRanges
         config.encoder.riverProjection.discreteRange = self.riverDiscreteColumnRanges
@@ -616,15 +652,15 @@ class GraphSizeSampler(Sampler):
         plt.figure(figsize=(20, 6))
         plt.subplot(1, 3, 1)
         plt.title("Node Count Distribution per Sample")
-        plt.hist(sizes, bins=10)
+        plt.hist(sizes)
 
         plt.subplot(1, 3, 2)
         plt.title("Node Count Distribution per Batch")
-        plt.hist(batchSizes, bins=10)
+        plt.hist(batchSizes)
 
         plt.subplot(1, 3, 3)
         plt.title("Data Samples Distribution per Batch")
-        plt.hist([len(batch) for batch in self.batches], bins=10)
+        plt.hist([len(batch) for batch in self.batches])
         plt.show()
 
     def __iter__(self):
