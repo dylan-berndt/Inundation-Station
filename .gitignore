@@ -1,6 +1,7 @@
 /.idea
 /train/**/*.csv
 
+/import/**
 /data/**/*
 
 **/*.__pycache__
@@ -8,3 +9,5 @@ __pycache__/
 
 checkpoints/2025-06-22/checkpoint.pt
 venv/
+
+.env

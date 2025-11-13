@@ -33,6 +33,7 @@ class PerformerEncoder(PerformerAttention):
         return out
 
 
+# TODO: Fix all of this
 class PerformerDecoder(PerformerAttention):
     def __init__(self, config: Config):
         super().__init__(**config)
@@ -73,7 +74,7 @@ class PerformerDecoder(PerformerAttention):
             lambda t: t.reshape(B, N, self.heads, self.head_channels).permute(
                 0, 2, 1, 3), (q2, k2, v2))
         if mask is not None:
-            v.masked_fill_(~mask, 0.)
+            v2.masked_fill_(~mask, 0.)
         out = self.attn2(q2, k2, v2)
         out = out.permute(0, 2, 1, 3).reshape(B, N, -1)
         out = self.attn_out(out)

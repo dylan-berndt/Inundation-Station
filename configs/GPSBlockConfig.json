@@ -12,67 +12,67 @@
         "basinProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 32
+            "outputDim": 64
         },
         "riverProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 32
+            "outputDim": 64
         },
         "block": {
             "gnnLSTM": {
                 "gnnType": "GPS",
                 "gnn": {
-                    "channels": 32,
+                    "channels": 64,
                     "layers": 2,
                     "attn_type": "multihead",
                     "heads": 4
                 },
-                "inChannels": 32,
-                "outChannels": 32,
+                "inChannels": 64,
+                "outChannels": 64,
                 "dropout": 0.2
             }
         },
         "blocks": 2,
         "head": {
-            "inputDim": 32,
-            "hiddenDim": 64,
+            "inputDim": 64,
+            "hiddenDim": 128,
             "mixtures": 12
         }
     },
     "bridge": {
-        "in_features": 32,
-        "out_features": 32
+        "in_features": 64,
+        "out_features": 64
     },
     "decoder": {
         "basinProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 32
+            "outputDim": 64
         },
         "riverProjection": {
             "discreteDim": 4,
             "dropout": 0.2,
-            "outputDim": 32
+            "outputDim": 64
         },
         "block": {
             "gnnLSTM": {
                 "gnnType": "GPS",
                 "gnn": {
-                    "channels": 32,
+                    "channels": 64,
                     "layers": 2,
                     "attn_type": "multihead",
                     "heads": 4
                 },
-                "inChannels": 32,
-                "outChannels": 32,
+                "inChannels": 64,
+                "outChannels": 64,
                 "dropout": 0.2
             }
         },
         "blocks": 2,
         "head": {
-            "inputDim": 32,
-            "hiddenDim": 64,
+            "inputDim": 64,
+            "hiddenDim": 128,
             "mixtures": 12
         }
     },

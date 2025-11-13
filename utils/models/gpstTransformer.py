@@ -35,6 +35,7 @@ class GPST(nn.Module):
         return x
     
 
+# TODO: Fix all of this
 class GPSTMultihead(nn.Module):
     def __init__(self, config: Config):
         super().__init__()

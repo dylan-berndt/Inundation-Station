@@ -101,7 +101,7 @@ class InundationData(Dataset):
         print("GeoPandas Loaded")
 
         # TODO: Downsample BasinATLAS parameters and RiverATLAS indices
-
+        # TODO: Distributed loading with multiple threads
         grdcPaths = glob(os.path.join(config.path, "series", "GRDC", "*.txt"))
         for f, filePath in enumerate(grdcPaths):
             fileName = os.path.basename(filePath)
@@ -159,7 +159,7 @@ class InundationData(Dataset):
 
         # TODO: Downsample BasinATLAS again 
         # TODO: Downsample incoming ERA5 data
-
+        # TODO: Distributed loading with multiple threads
         sumLakes = 0
         era5Paths = glob(os.path.join(config.path, "series", "ERA5_Parquet", "*.parquet"))
         for f, filePath in enumerate(era5Paths):
@@ -616,15 +616,15 @@ class GraphSizeSampler(Sampler):
         plt.figure(figsize=(20, 6))
         plt.subplot(1, 3, 1)
         plt.title("Node Count Distribution per Sample")
-        plt.hist(sizes)
+        plt.hist(sizes, bins=10)
 
         plt.subplot(1, 3, 2)
         plt.title("Node Count Distribution per Batch")
-        plt.hist(batchSizes)
+        plt.hist(batchSizes, bins=10)
 
         plt.subplot(1, 3, 3)
         plt.title("Data Samples Distribution per Batch")
-        plt.hist([len(batch) for batch in self.batches])
+        plt.hist([len(batch) for batch in self.batches], bins=10)
         plt.show()
 
     def __iter__(self):
