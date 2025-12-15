@@ -62,7 +62,7 @@ def defaultNoise(minNoise, maxNoise):
 
 
 class InundationData(Dataset):
-    def __init__(self, config, location="NA", noise=defaultNoise(0.5, 0.7)):
+    def __init__(self, config, location="NA", noise=defaultNoise(0.5, 0.7), display=False):
         self.config = config
 
         precomputeJoins(config)
@@ -142,7 +142,7 @@ class InundationData(Dataset):
                 print(f"\n\n {riverID} {np.min(values), np.max(values)}")
 
             grdcDict[riverID]["Time"] = linspace
-            grdcDict[riverID]["Stage"] = torch.tensor(values, dtype=torch.float32)
+            grdcDict[riverID]["Stage"] = torch.tensor(values, dtype=torch.float32, device="cpu")
             grdcDict[riverID]["Thresholds"] = calculateReturnPeriods(thresholdDF)
             grdcDict[riverID]["Mean"] = np.mean(values)
             grdcDict[riverID]["Deviation"] = np.std(values)
@@ -194,7 +194,7 @@ class InundationData(Dataset):
                 basinData[0, :] = start
                 sumLakes += 1
 
-            pfafDict[pfafID]["Data"] = torch.nan_to_num(torch.tensor(basinData, dtype=torch.float32))
+            pfafDict[pfafID]["Data"] = torch.nan_to_num(torch.tensor(basinData, dtype=torch.float32, device="cpu"))
             pfafDict[pfafID]["Area"] = area
 
             print(f"\r{f + 1}/{len(era5Paths)} ERA5 files loaded", end="")
@@ -246,7 +246,19 @@ class InundationData(Dataset):
                 del self.grdcDict[node]
 
         upstreams = [len(self.upstreamBasins[node]) for node in self.upstreamBasins]
+        diameters = [nx.diameter(graph.subgraph(nx.ancestors(graph, node) | {node}).to_undirected())  for node in self.pfafDict.keys()]
         print(f"Upstream Basins Compiled | {np.median(upstreams)} | {np.mean(upstreams)}")
+
+        if display:
+            plt.hist(upstreams)
+            plt.ylabel("Count")
+            plt.xlabel("Number of Nodes")
+            plt.show()
+
+            plt.hist(diameters)
+            plt.ylabel("Count")
+            plt.xlabel("Graph Diameter")
+            plt.show()
 
         self.upstreamStructure = {
             node: list(graph.subgraph(self.upstreamBasins[node]).edges) for node in self.pfafDict.keys()

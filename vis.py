@@ -1,9 +1,5 @@
 import socket
-import tkinter as tk
-from tkinter import ttk
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.figure import Figure
 import numpy as np
 from datetime import datetime
 import math
@@ -24,8 +20,11 @@ class Client:
         self.socket.connect((host, port))
 
     def send(self, name, data):
-        collated = f" | {name}||{data}"
-        self.socket.sendall(bytes(collated, encoding='utf-8'))
+        try:
+            collated = f" | {name}||{data}"
+            self.socket.sendall(bytes(collated, encoding='utf-8'))
+        except BrokenPipeError:
+            pass
 
 
 class Server:
@@ -201,6 +200,11 @@ class DataGUI:
 
 
 if __name__ == "__main__":
+    import tkinter as tk
+    from tkinter import ttk
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+    from matplotlib.figure import Figure
+
     server = Server()
     gui = DataGUI(server)
     gui.run()

@@ -16,24 +16,27 @@ def getGRDCDataframe(path):
     grdcDF = pd.DataFrame(columns=['id', 'lat', 'lon', 'area'])
 
     for filePath in sorted(glob(folderGRDC)):
-        file = open(filePath, "r")
+        file = open(filePath, "r", encoding="utf-8", errors="ignore")
         fileName = os.path.basename(filePath)
         riverID = fileName.split("_")[0]
 
-        lat, lon, area = None, None, None
-        for line in file.readlines():
-            if "# DATA" in line:
-                break
+        try:
+            lat, lon, area = None, None, None
+            for line in file.readlines():
+                if "# DATA" in line:
+                    break
 
-            if "# Latitude" in line:
-                lat = line.split()[3]
-            if "# Longitude" in line:
-                lon = line.split()[3]
-            if "# Catchment" in line:
-                area = float(line.split()[4])
+                if "# Latitude" in line:
+                    lat = line.split()[3]
+                if "# Longitude" in line:
+                    lon = line.split()[3]
+                if "# Catchment" in line:
+                    area = float(line.split()[4])
 
-        newDF = pd.DataFrame([[riverID, lat, lon, area]], columns=grdcDF.columns)
-        grdcDF = pd.concat([newDF, grdcDF], ignore_index=True)
+            newDF = pd.DataFrame([[riverID, lat, lon, area]], columns=grdcDF.columns)
+            grdcDF = pd.concat([newDF, grdcDF], ignore_index=True)
+        except UnicodeDecodeError:
+            print(fileName)
 
     return grdcDF
 
