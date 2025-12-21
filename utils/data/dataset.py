@@ -22,8 +22,7 @@ from datetime import datetime
 from itertools import chain
 import random
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-torch.set_default_device(device)
+from torch.profiler import profile, ProfilerActivity, record_function
 
 
 class BasinData(Data):
@@ -61,17 +60,27 @@ def defaultNoise(minNoise, maxNoise):
     return noiseData
 
 
+def safeMode(s):
+    m = s.mode()
+    if len(m) == 0:
+        return None
+    return m.iloc[0]
+
+
 # Performs area-weighted averaging on continuous columns, chooses most common discrete column
-def downsampleBasinATLAS(gdf, downsampling, continuousColumns, discreteColumns):
-    gdf["groupID"] = gdf["id"].apply(lambda x: type(x)(str(x)[:-downsampling]))
+def downsampleBasinATLAS(gdf, downsampling, continuousColumns, discreteColumns, idColumn="id"):
+    gdf["groupID"] = gdf[idColumn].apply(lambda x: type(x)(str(x)[:-downsampling]))
     areaWeighted = gdf.copy()
-    # TODO: Double check that SUB_AREA itself is not affected by scaling and such
-    areaWeighted[continuousColumns] = areaWeighted[continuousColumns] * areaWeighted["SUB_AREA"]
+
+    areaWeighted[continuousColumns] = areaWeighted[continuousColumns].to_numpy() * areaWeighted["SUB_AREA"].to_numpy()[:, None]
     # Using mode is a bit dodgy here, has to do with sub-basin sizes
-    grouped = gdf.dissolve("groupID", aggfunc={key: "sum" if key in continuousColumns else "mode" 
+    grouped = gdf.dissolve("groupID", aggfunc={key: "sum" if key in continuousColumns else safeMode 
                                                for key in continuousColumns + discreteColumns})
-    # TODO: Double check that SUB_AREA itself is not affected by scaling and such
-    grouped[continuousColumns] = grouped[continuousColumns] / grouped["SUB_AREA"]
+
+    areas = grouped["SUB_AREA"].copy()
+    grouped[continuousColumns] = grouped[continuousColumns].to_numpy() / grouped["SUB_AREA"].to_numpy()[:, None]
+    grouped["SUB_AREA"] = areas
+    grouped["PFAF_ID"] = grouped.index
 
     return grouped
 
@@ -119,7 +128,7 @@ class InundationData(Dataset):
 
         # TODO: Downsample BasinATLAS parameters and RiverATLAS indices
         if "downsampling" in config:
-            basinSHP = downsampleBasinATLAS(basinSHP, config.downsampling, basinContinuousColumns, basinDiscreteColumns)
+            # basinSHP = downsampleBasinATLAS(basinSHP, config.downsampling, basinContinuousColumns, basinDiscreteColumns)
 
             for key, value in translateDict.items():
                 translateDict[key] = value[:-config.downsampling]
@@ -169,7 +178,7 @@ class InundationData(Dataset):
                 print(f"\n\n {riverID} {np.min(values), np.max(values)}")
 
             grdcDict[riverID]["Time"] = linspace
-            grdcDict[riverID]["Stage"] = torch.tensor(values, dtype=torch.float32, device="cpu")
+            grdcDict[riverID]["Stage"] = torch.tensor(values, dtype=torch.float32)
             grdcDict[riverID]["Thresholds"] = calculateReturnPeriods(thresholdDF)
             grdcDict[riverID]["Mean"] = np.mean(values)
             grdcDict[riverID]["Deviation"] = np.std(values)
@@ -180,14 +189,15 @@ class InundationData(Dataset):
 
         self.era5Scales = config.scales
 
-        self.basinATLAS = gpd.read_file(os.path.join(config.path, "BasinATLAS_v10_shp", "BasinATLAS_v10_lev07.shp"))
-        basinArea = self.basinATLAS.copy().set_index("PFAF_ID").groupby(level=0).first()
+        level = str(7 - (config.downsampling if "downsampling" in config else 0))
+        self.basinATLAS = gpd.read_file(os.path.join(config.path, "BasinATLAS_v10_shp", f"BasinATLAS_v10_lev0{level}.shp"))
         
         if "downsampling" in config:
-            self.basinATLAS = downsampleBasinATLAS(self.basinATLAS, config.downsampling, basinContinuousColumns, basinDiscreteColumns)
-            basinArea = downsampleBasinATLAS(basinArea, config.downsampling, basinContinuousColumns, basinDiscreteColumns)
+            # self.basinATLAS = downsampleBasinATLAS(self.basinATLAS, config.downsampling, basinContinuousColumns, basinDiscreteColumns, idColumn="PFAF_ID")
 
             config.scales = era5Scales(os.path.join(config.path, "series", "ERA5_Parquet"), self.basinATLAS, config.downsampling)
+
+        basinArea = self.basinATLAS.copy().set_index("PFAF_ID").groupby(level=0).first()
 
         sumLakes = 0
         era5Paths = glob(os.path.join(config.path, "series", "ERA5_Parquet", "*.parquet"))
@@ -237,7 +247,7 @@ class InundationData(Dataset):
             else:
                 pfafDict[pfafID]["Data"] = data
                 pfafDict[pfafID]["Area"] = area
-            pfafDict[pfafID]["Data"] = torch.nan_to_num(torch.tensor(basinData, dtype=torch.float32, device="cpu"))
+            pfafDict[pfafID]["Data"] = torch.nan_to_num(torch.tensor(basinData, dtype=torch.float32))
             pfafDict[pfafID]["Area"] = area
 
         print(f"\nTotal empty basins: {sumLakes}")
@@ -245,8 +255,6 @@ class InundationData(Dataset):
         self.grdcDict = grdcDict
         self.pfafDict = pfafDict
         self.translateDict = translateDict
-
-        # TODO: Verify stability with downsampling
 
         graph = nx.DiGraph()
         for i, row in self.basinATLAS.iterrows():
@@ -256,8 +264,11 @@ class InundationData(Dataset):
             if pd.isna(upstream["NEXT_DOWN"]) or upstream["NEXT_DOWN"] == 0:
                 continue
 
+            # TODO: Fix, HYBAS_ID is not the same
             downstreamBasins = self.basinATLAS[self.basinATLAS["HYBAS_ID"] == upstream["NEXT_DOWN"]]
             for _, downstream in downstreamBasins.iterrows():
+                if str(upstream["PFAF_ID"]) == str(downstream["PFAF_ID"]):
+                    continue
                 graph.add_edge(str(upstream["PFAF_ID"]), str(downstream["PFAF_ID"]))
 
             print(f"\r{i}/{len(self.basinATLAS)} Basin Structures Appended to Graph", end="")
@@ -422,6 +433,7 @@ class InundationData(Dataset):
             basinDiscrete = torch.tensor(self.basinDiscrete.loc[int(pfafID)].to_numpy(dtype=np.int64), dtype=torch.long)
             self.pfafDict[pfafID]["atlasContinuous"] = basinContinuous
             self.pfafDict[pfafID]["atlasDiscrete"] = basinDiscrete
+            self.pfafDict[pfafID]["first"] = int(self.pfafDict[pfafID]["Data"][0, 0])
 
         print("Static Input Scaling Complete")
 
@@ -453,20 +465,21 @@ class InundationData(Dataset):
 
         basinERA5Data = []
         basinArea = []
-        for b, basin in enumerate(upstreamBasins):
-            data = self.pfafDict[basin]["Data"]
+        with record_function("basin_era5_data"):
+            for b, basin in enumerate(upstreamBasins):
+                data = self.pfafDict[basin]["Data"]
 
-            first = int(data[0, 0].item())
-            index = riverTime[0] - first
-            length = riverTime[-1] - riverTime[0]
-            data = data[int(index): int(index + length), 1:]
+                first = self.pfafDict[basin]["first"]
+                index = riverTime[0] - first
+                length = riverTime[-1] - riverTime[0]
+                data = data[int(index): int(index + length), 1:]
 
-            data = torch.nan_to_num(data)
+                data = torch.nan_to_num(data)
 
-            basinERA5Data.append(data)
+                basinERA5Data.append(data)
 
-            area = self.pfafDict[basin]["Area"]
-            basinArea.append(area)
+                area = self.pfafDict[basin]["Area"]
+                basinArea.append(area)
 
         basinArea = torch.tensor(basinArea, dtype=torch.float32)
 
@@ -488,11 +501,12 @@ class InundationData(Dataset):
 
         structure = torch.transpose(torch.tensor(self.upstreamStructure[pfafID], dtype=torch.long), 0, 1).contiguous()
 
-        basinContinuous, basinDiscrete = torch.nan_to_num(basinContinuous), torch.nan_to_num(basinDiscrete, 0, 0, 0)
-        riverContinuous, riverDiscrete = torch.nan_to_num(riverContinuous), torch.nan_to_num(riverDiscrete, 0, 0, 0)
-        structure = torch.nan_to_num(structure, 0, 0, 0)
-        dischargeHistory, dischargeFuture = torch.nan_to_num(dischargeHistory), torch.nan_to_num(dischargeFuture)
-        dischargeHistory, dischargeFuture = self.transform.forward(dischargeHistory), self.transform.forward(dischargeFuture)
+        with record_function("basin_nan"):
+            basinContinuous, basinDiscrete = torch.nan_to_num(basinContinuous), torch.nan_to_num(basinDiscrete, 0, 0, 0)
+            riverContinuous, riverDiscrete = torch.nan_to_num(riverContinuous), torch.nan_to_num(riverDiscrete, 0, 0, 0)
+            structure = torch.nan_to_num(structure, 0, 0, 0)
+            dischargeHistory, dischargeFuture = torch.nan_to_num(dischargeHistory), torch.nan_to_num(dischargeFuture)
+            dischargeHistory, dischargeFuture = self.transform.forward(dischargeHistory), self.transform.forward(dischargeFuture)
 
         past = BasinData(
             era5=era5History,
@@ -612,8 +626,8 @@ class InundationData(Dataset):
         trainSampler = GraphSizeSampler(train, nodesPerBatch=dataset.config.nodesPerBatch, force=False, shuffle=shuffle)
         testSampler = GraphSizeSampler(test, nodesPerBatch=dataset.config.nodesPerBatch, force=False, shuffle=shuffle)
 
-        train = DataLoader(train, batch_sampler=trainSampler, generator=torch.Generator(device))
-        test = DataLoader(test, batch_sampler=testSampler, generator=torch.Generator(device))
+        train = DataLoader(train, batch_sampler=trainSampler, num_workers=4)
+        test = DataLoader(test, batch_sampler=testSampler, num_workers=4)
 
         return train, test
 
@@ -701,32 +715,33 @@ class FloodHubData(InundationData):
     def __getitem__(self, i):
         (past, future), targets = super().__getitem__(i)
 
-        size = past.basinArea
-        mult = size / torch.sum(size)
-        mult = mult.unsqueeze(1).unsqueeze(2)
+        with record_function("basin_agg"):
+            size = past.basinArea
+            mult = size / torch.sum(size)
+            mult = mult.unsqueeze(1).unsqueeze(2)
 
-        # print((past.basinContinuous * mult).shape)
-        # print((past.basinContinuous * mult.squeeze(1)).shape)
-        # print(torch.sum(past.basinContinuous * mult.squeeze(1), dim=0).shape)
+            # print((past.basinContinuous * mult).shape)
+            # print((past.basinContinuous * mult.squeeze(1)).shape)
+            # print(torch.sum(past.basinContinuous * mult.squeeze(1), dim=0).shape)
 
-        past.era5 = torch.sum(past.era5 * mult, dim=0)
-        past.basinContinuous = torch.sum(past.basinContinuous * mult.squeeze(1), dim=0)
+            past.era5 = torch.sum(past.era5 * mult, dim=0)
+            past.basinContinuous = torch.sum(past.basinContinuous * mult.squeeze(1), dim=0)
 
-        # print(past.basinContinuous.shape)
+            # print(past.basinContinuous.shape)
 
-        future.era5 = torch.sum(future.era5 * mult, dim=0)
-        future.basinContinuous = torch.sum(future.basinContinuous * mult.squeeze(1), dim=0)
+            future.era5 = torch.sum(future.era5 * mult, dim=0)
+            future.basinContinuous = torch.sum(future.basinContinuous * mult.squeeze(1), dim=0)
 
-        # print(future.basinContinuous.shape)
+            # print(future.basinContinuous.shape)
 
-        del past.basinDiscrete
-        del future.basinDiscrete
-        del past.edge_index
-        del future.edge_index
+            del past.basinDiscrete
+            del future.basinDiscrete
+            del past.edge_index
+            del future.edge_index
 
-        past = FloodData().update(past)
-        future = FloodData().update(future)
-        targets = FloodData().update(targets)
+            past = FloodData().update(past)
+            future = FloodData().update(future)
+            targets = FloodData().update(targets)
 
         # p = past.to_dict()
         # for key, value in p.items():
@@ -764,8 +779,8 @@ class FloodHubData(InundationData):
         train = torch.utils.data.Subset(dataset, trainIndex)
         test = torch.utils.data.Subset(dataset, testIndex)
 
-        train = DataLoader(train, generator=torch.Generator(device), batch_size=dataset.config.batchSize, shuffle=shuffle)
-        test = DataLoader(test, generator=torch.Generator(device), batch_size=dataset.config.batchSize, shuffle=shuffle)
+        train = DataLoader(train, batch_size=dataset.config.batchSize, shuffle=shuffle, num_workers=4)
+        test = DataLoader(test, batch_size=dataset.config.batchSize, shuffle=shuffle, num_workers=4)
 
         return train, test
 

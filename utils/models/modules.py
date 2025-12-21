@@ -229,7 +229,7 @@ class CMALNormalizedMeanAbsolute(nn.Module):
         super().__init__()
 
     def forward(self, yPred, yTrue, deviations, *args, **kwargs):
-        return torch.mean(torch.abs(yPred - yTrue)).item()
+        return torch.mean(torch.abs(yPred - yTrue))
     
 
 class CMALMeanAbsolute(nn.Module):
@@ -239,7 +239,7 @@ class CMALMeanAbsolute(nn.Module):
     def forward(self, yPred, yTrue, deviations, *args, **kwargs):
         yPred = yPred * deviations
         yTrue = yTrue * deviations
-        return torch.mean(torch.abs(yPred - yTrue)).item()
+        return torch.mean(torch.abs(yPred - yTrue))
 
 
 class CMALPrecision(nn.Module):
@@ -274,7 +274,7 @@ class CMALPrecision(nn.Module):
 
         value = tp / (tp + fp + 1e-8)
         value = torch.nan_to_num(value, 0, 0, 0)
-        return value.item()
+        return value
 
 
 class CMALRecall(nn.Module):
@@ -309,7 +309,22 @@ class CMALRecall(nn.Module):
 
         value = tp / (tp + fn + 1e-8)
         value = torch.nan_to_num(value, 0, 0, 0)
-        return value.item()
+        return value
+    
+
+class CMALF1(nn.Module):
+    def __init__(self, direction="above", batches=100, sample=0):
+        super().__init__()
+        self.precision = CMALPrecision(direction, batches, sample)
+        self.recall = CMALRecall(direction, batches, sample)
+
+    def forward(self, yPred, yTrue, thresholds, *args, **kwargs):
+        precision = self.precision(yPred, yTrue, thresholds, *args, **kwargs)
+        recall = self.recall(yPred, yTrue, thresholds, *args, **kwargs)
+
+        f1 = (2 * precision * recall) / (precision + recall + 1e-8)
+
+        return f1
     
 
 class CMALNSE(nn.Module):
@@ -333,7 +348,7 @@ class CMALNSE(nn.Module):
         denominator = torch.sum(torch.pow(yTrueC - meansC, 2))
 
         value = 1 - (numerator / denominator)
-        return value.item()
+        return value
     
 
 class CMALKGE(nn.Module):
@@ -350,7 +365,7 @@ class CMALKGE(nn.Module):
 
         value = 1 - torch.sqrt(torch.pow(r - 1, 2) + torch.pow(alpha - 1, 2) + torch.pow(beta - 1, 2))
         value = torch.nan_to_num(value, 0, 0, 0)
-        return value.item()
+        return value
     
 
 class CMALUncertainty(nn.Module):
@@ -359,7 +374,7 @@ class CMALUncertainty(nn.Module):
 
     def forward(self, yPred, *args, **kwargs):
         yPred = torch.sum(yPred[1] * yPred[3], dim=-1)
-        return torch.mean(yPred).item()
+        return torch.mean(yPred)
 
 
 def sampleCMAL(yPred, numSamples):

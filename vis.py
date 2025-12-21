@@ -17,18 +17,29 @@ DISPLAY_REFRESH = 0.1
 class Client:
     def __init__(self, host, port=12001):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         self.socket.connect((host, port))
+
+        threading.Thread(target=self.heartbeat, args=(), daemon=True).start()
 
     def send(self, name, data):
         try:
-            collated = f" | {name}||{data}"
+            collated = f"{name}||{data}\n"
             self.socket.sendall(bytes(collated, encoding='utf-8'))
         except BrokenPipeError:
             pass
 
+    def heartbeat(self, interval=10):
+        while True:
+            try:
+                self.send("__heartbeat__", 0)
+            except BrokenPipeError:
+                break
+            time.sleep(interval)
+
 
 class Server:
-    def __init__(self, port=12954):
+    def __init__(self, port=12945):
         self.data = {}
         self.time = {}
 
@@ -42,20 +53,25 @@ class Server:
 
         self.accept()
 
+        self.buffer = ""
+
     def accept(self):
         found = False
         while not found:
             try:
-                self.client, _ = self.socket.accept()
+                self.client, addr = self.socket.accept()
+                print("Connected from", addr)
                 found = True
             except BlockingIOError:
                 pass
 
     def receive(self):
-        stringData = self.client.recv(4096).decode(encoding='utf-8')
+        chunk = self.client.recv(4096).decode("utf-8")
+        print(chunk)
+        self.buffer += chunk
 
-        dataPoints = stringData.split(" | ")
-        for data in dataPoints:
+        while "\n" in self.buffer:
+            data, self.buffer = self.buffer.split("\n", 1)
             if not data:
                 continue
 
@@ -83,7 +99,7 @@ class DataGUI:
         self.server = server
         self.root = tk.Tk()
         self.root.title("Model Tracker")
-    
+
         self.frame = ttk.Frame(self.root)
         self.frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
@@ -108,10 +124,12 @@ class DataGUI:
         self.data_thread = threading.Thread(target=self.dataCollection, daemon=True)
         self.data_thread.start()
 
+        self.ordering = {}
+
         self.updatePlots()
 
     def _on_mousewheel(self, event):
-        self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
     def dataCollection(self):
         while self.running:
@@ -119,6 +137,9 @@ class DataGUI:
                 self.server.receive()
             except (ValueError, BlockingIOError):
                 pass
+            except ConnectionResetError:
+                self.running = False
+                self.root.after(0, self.root.destroy)
             time.sleep(0.01)
 
     def createPlot(self, name, row, col):
@@ -153,13 +174,17 @@ class DataGUI:
         if not self.server.data:
             self.root.after(int(DISPLAY_REFRESH * 1000), self.updatePlots)
             return
-        
+
         currentDataSeries = set(self.server.data.keys())
         existingPlots = set(self.plots.keys())
 
         for key in currentDataSeries - existingPlots:
-            row = len(self.plots)
-            col = 0
+            seriesName = " ".join(key.split(" ")[1:])
+            if seriesName not in self.ordering:
+                self.ordering[seriesName] = len(self.ordering)
+            row = self.ordering[seriesName]
+
+            col = 0 if key.startswith("Train") else 1
             self.plots[key] = self.createPlot(key, row, col)
             self.canvas.update_idletasks()
 
@@ -184,7 +209,7 @@ class DataGUI:
                 display = datum[len(datum) - (MAX_DISPLAY_POINTS + 1):]
                 ax2.plot(points, display, label=name, alpha=0.7)
                 ax2.axhline(np.mean(display), linestyle='--', color='orange')
-            
+
             ax1.legend()
             ax2.legend()
 
@@ -205,7 +230,10 @@ if __name__ == "__main__":
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
     from matplotlib.figure import Figure
 
-    server = Server()
-    gui = DataGUI(server)
-    gui.run()
+    while True:
+        server = Server(port=12945)
+        gui = DataGUI(server)
+        gui.run()
+        server.socket.close()
+        del server
 

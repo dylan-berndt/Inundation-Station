@@ -50,6 +50,9 @@ class Config:
     def overwrite(self):
         self.save(self._location)
 
+    def serialize(self):
+        return self._serialize(self)
+
     def save(self, path):
         with open(path, "w+") as file:
             json.dump(self._serialize(self), file, indent=4)

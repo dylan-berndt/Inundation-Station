@@ -64,17 +64,17 @@ def joinGRDCRiverATLAS(path, location="NA"):
     joined.to_file(joinedDFPath)
 
 
-def joinGRDCBasinATLAS(path, location="NA"):
+def joinGRDCBasinATLAS(path, location="NA", level="7"):
     grdcDF = getGRDCDataframe(path)
 
     grdcGDF = gpd.GeoDataFrame(grdcDF, geometry=gpd.points_from_xy(grdcDF.lon, grdcDF.lat), crs='EPSG:4326')
-    basinSHP = gpd.read_file(os.path.join(path, "BasinATLAS_v10_shp", "BasinATLAS_v10_lev07.shp"))
+    basinSHP = gpd.read_file(os.path.join(path, "BasinATLAS_v10_shp", f"BasinATLAS_v10_lev0{level}.shp"))
 
     grdcGDF = grdcGDF.to_crs(epsg=3857)
     basinSHP = basinSHP.to_crs(epsg=3857)
 
-    joined = gpd.sjoin_nearest(grdcGDF, basinSHP, how="left", distance_col="basin_dist")
-    joined = joined.sort_values("basin_dist").drop_duplicates("id")
+    joined = gpd.sjoin(basinSHP, grdcGDF, predicate="contains")
+    joined = joined.drop_duplicates("id")
     joined.set_index("id")
     joinedDFPath = os.path.join(path, "joined", f"BasinATLAS_{location}_Joined.shp")
 
@@ -142,6 +142,7 @@ def era5Scales(path, basinATLAS, downsampling=0):
     dataDict = {}
     areaDict = {}
 
+    iterations = 0
     era5Paths = glob(os.path.join(path, "*.parquet"))
     era5Files = loadSeveral(era5Paths, pd.read_parquet)
     for f, df in enumerate(era5Files):
@@ -190,8 +191,8 @@ def precomputeJoins(config):
     if not os.path.exists(os.path.join(config.path, "joined", "RiverATLAS_NA_Joined.shp")):
         joinGRDCRiverATLAS(config.path)
 
-    if not os.path.exists(os.path.join(config.path, "joined", "BasinATLAS_NA_Joined.shp")):
-        joinGRDCBasinATLAS(config.path)
+    level = str(7 - (config.downsampling if "downsampling" in config else 0))
+    joinGRDCBasinATLAS(config.path, level=level)
 
     newRiverSHP = gpd.read_file(os.path.join(config.path, "joined", "RiverATLAS_NA_Joined.shp"))
 
@@ -206,7 +207,7 @@ def precomputeJoins(config):
     if len(glob(os.path.join(config.path, "series", "ERA5_Parquet", "*.parquet"))) < 1:
         csvToParquet(os.path.join(config.path, "series", "ERA5"), os.path.join(config.path, "series", "ERA5_Parquet"))
 
-    basinATLAS = gpd.read_file(os.path.join(config.path, "BasinATLAS_v10_shp", "BasinATLAS_v10_lev07.shp"))
+    basinATLAS = gpd.read_file(os.path.join(config.path, "BasinATLAS_v10_shp", f"BasinATLAS_v10_lev0{level}.shp"))
 
     if "scales" not in config:
         config.scales = era5Scales(os.path.join(config.path, "series", "ERA5_Parquet"), basinATLAS)
