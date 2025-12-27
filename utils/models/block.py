@@ -7,7 +7,23 @@ from torch_geometric.nn.inits import glorot, zeros
 from torch_geometric.utils import scatter
 
 
-gnnResolution = {"GAT": gnn.GATv2Conv, "GPS": GPS, "GIN": gnn.GINConv, "GCN": gnn.GCN2Conv, "Cheb": gnn.conv.ChebConv}
+class APPNP(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.mlp = torch.nn.Sequential(
+            torch.nn.Linear(config.in_channels, config.out_channels),
+            torch.nn.ReLU(),
+            torch.nn.Linear(config.out_channels, config.out_channels)
+        )
+        self.appnp = gnn.APPNP(k=config.k, alpha=config.alpha)
+
+    def forward(self, x, edge_index, edge_weight):
+        x = self.mlp(x)
+        x = self.appnp(x, edge_index, edge_weight)
+        return x
+
+
+gnnResolution = {"GAT": gnn.GATv2Conv, "GPS": GPS, "GIN": gnn.GINConv, "GCN": gnn.GCN2Conv, "Cheb": gnn.conv.ChebConv, "APPNP": APPNP}
 
 
 class GNNLSTM(nn.Module):

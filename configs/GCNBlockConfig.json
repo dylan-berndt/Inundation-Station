@@ -21,11 +21,10 @@
         },
         "block": {
             "gnnLSTM": {
-                "gnnType": "GAT",
+                "gnnType": "GCN",
                 "gnn": {
                     "in_channels": 64,
-                    "out_channels": 64,
-                    "heads": 4
+                    "out_channels": 64
                 },
                 "inChannels": 64,
                 "outChannels": 64,
@@ -56,11 +55,10 @@
         },
         "block": {
             "gnnLSTM": {
-                "gnnType": "GAT",
+                "gnnType": "GCN",
                 "gnn": {
                     "in_channels": 64,
-                    "out_channels": 64,
-                    "heads": 4
+                    "out_channels": 64
                 },
                 "inChannels": 64,
                 "outChannels": 64,
