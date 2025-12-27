@@ -179,16 +179,6 @@ class CMAL(nn.Module):
         mean = m + (1 - torch.pow(t, 2)) / (b * t)
         mean = torch.sum(mean * p, dim=-1)
         return mean
-
-
-# I might be stupid
-class BatchNorm(nn.Module):
-    def __init__(self, hiddenDim):
-        super().__init__()
-        self.bn = nn.BatchNorm1d(hiddenDim)
-
-    def forward(self, x):
-        return self.bn(x.permute(0, 2, 1)).permute(0, 2, 1)
     
 
 def identity(x):
@@ -351,20 +341,49 @@ class CMALNSE(nn.Module):
         return value
     
 
-class CMALKGE(nn.Module):
-    def __init__(self):
+class Pearson(nn.Module):
+    def __init__(self, aggregation=None):
         super().__init__()
+        self.agg = identity if aggregation is None else aggregation
 
-    def forward(self, yPred, yTrue, means, *args, **kwargs):
-        yPred = CMAL.median(yPred)
+    def forward(self, x, y):
+        x, y = x.flatten(start_dim=1), y.flatten(start_dim=1)
+        xs = torch.std(x, dim=1)
+        ys = torch.std(y, dim=1)
 
-        r, _ = pearsonr(yPred.detach().flatten().cpu().numpy(), yTrue.detach().flatten().cpu().numpy())
+        xc = x - torch.mean(x, dim=1)
+        yc = y - torch.mean(y, dim=1)
 
-        beta = torch.mean(yPred) / torch.mean(yTrue)
-        alpha = torch.std(yPred) / torch.std(yTrue)
+        cov = torch.sum(xc * yc, dim=1)
+        pcc = cov / (xs * ys + 1e-6)
+        return pcc
+    
+
+class CMALKGE(nn.Module):
+    def __init__(self, batches=100):
+        super().__init__()
+        self.pearson = Pearson()
+        self.batches = []
+        self.numBatches = batches
+
+    def forward(self, yPred, yTrue, means, deviations, *args, **kwargs):
+        self.batches.append((yPred, yTrue, means, deviations))
+
+        if len(self.batches) > self.numBatches:
+            self.batches = self.batches[1:]
+
+        yPredV = torch.cat([batch[0] for batch in self.batches], dim=0)
+        yTrueC = torch.cat([batch[1] for batch in self.batches], dim=0)
+        meansC = torch.cat([batch[2] for batch in self.batches], dim=0)
+        devsC = torch.cat([batch[3] for batch in self.batches], dim=0)
+
+        r = self.pearson(yPredV, yTrueC)
+
+        beta = torch.mean(yPredV) / meansC
+        alpha = torch.std(yPredV) / devsC
 
         value = 1 - torch.sqrt(torch.pow(r - 1, 2) + torch.pow(alpha - 1, 2) + torch.pow(beta - 1, 2))
-        value = torch.nan_to_num(value, 0, 0, 0)
+        value = torch.mean(torch.nan_to_num(value, 0, 0, 0))
         return value
     
 
