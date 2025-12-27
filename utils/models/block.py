@@ -7,7 +7,7 @@ from torch_geometric.nn.inits import glorot, zeros
 from torch_geometric.utils import scatter
 
 
-gnnResolution = {"GAT": gnn.GAT, "GPS": GPS}
+gnnResolution = {"GAT": gnn.GATv2Conv, "GPS": GPS, "GIN": gnn.GINConv, "GCN": gnn.GCN2Conv, "Cheb": gnn.conv.ChebConv}
 
 
 class GNNLSTM(nn.Module):
@@ -19,7 +19,7 @@ class GNNLSTM(nn.Module):
             config.gnnType = "GAT"
             config.gat = config.gnn
 
-        self.convs = nn.ModuleList([gnnResolution[config.gnnType](**config.gnn).to(device='cuda') for _ in range(4)])
+        self.convs = nn.ModuleList([gnnResolution[config.gnnType](**config.gnn).to(device="cuda") for _ in range(4)])
         self.weights = nn.ParameterList([nn.Parameter(torch.Tensor(config.inChannels, config.outChannels)) for _ in range(4)])
         self.biases = nn.ParameterList([nn.Parameter(torch.Tensor(1, config.outChannels)) for _ in range(4)])
 
@@ -144,10 +144,10 @@ class InundationBlockCoder(nn.Module):
             coded, newState = block(projected, inputs.edge_index, state)
             projected = projected + coded
 
-        # batchIndices = torch.concatenate([torch.tensor([0]), torch.cumsum(inputs.nodes, dim=0)[:-1]], dim=0)
-        # sampledBasin = projected[batchIndices, :, :]
+        batchIndices = torch.concatenate([torch.tensor([0]).to(projected.device), torch.cumsum(inputs.nodes.to(projected.device), dim=0)[:-1]], dim=0)
+        sampledBasin = projected[batchIndices, :, :]
 
-        sampledBasin = scatter(projected, inputs.batch, dim=0, reduce='max')
+        # sampledBasin = scatter(projected, inputs.batch, dim=0, reduce='max')
 
         riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
         riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)

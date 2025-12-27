@@ -21,11 +21,11 @@
         },
         "block": {
             "gnnLSTM": {
-                "gnnType": "GAT",
+                "gnnType": "Cheb",
                 "gnn": {
                     "in_channels": 64,
-                    "hidden_channels": 64,
-                    "num_layers": 5
+                    "out_channels": 64,
+                    "K": 2
                 },
                 "inChannels": 64,
                 "outChannels": 64,
@@ -56,11 +56,11 @@
         },
         "block": {
             "gnnLSTM": {
-                "gnnType": "GAT",
+                "gnnType": "Cheb",
                 "gnn": {
                     "in_channels": 64,
-                    "hidden_channels": 64,
-                    "num_layers": 5
+                    "out_channels": 64,
+                    "K": 2
                 },
                 "inChannels": 64,
                 "outChannels": 64,
