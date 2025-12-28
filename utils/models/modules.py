@@ -348,13 +348,13 @@ class Pearson(nn.Module):
 
     def forward(self, x, y):
         x, y = x.flatten(start_dim=1), y.flatten(start_dim=1)
-        xs = torch.std(x, dim=1)
-        ys = torch.std(y, dim=1)
+        xs = torch.std(x, dim=1, keepdim=True)
+        ys = torch.std(y, dim=1, keepdim=True)
 
-        xc = x - torch.mean(x, dim=1)
-        yc = y - torch.mean(y, dim=1)
+        xc = x - torch.mean(x, dim=1, keepdim=True)
+        yc = y - torch.mean(y, dim=1, keepdim=True)
 
-        cov = torch.sum(xc * yc, dim=1)
+        cov = torch.sum(xc * yc, dim=1, keepdim=True)
         pcc = cov / (xs * ys + 1e-6)
         return pcc
     
@@ -379,8 +379,8 @@ class CMALKGE(nn.Module):
 
         r = self.pearson(yPredV, yTrueC)
 
-        beta = torch.mean(yPredV) / meansC
-        alpha = torch.std(yPredV) / devsC
+        beta = torch.mean(yPredV, dim=1) / meansC
+        alpha = torch.std(yPredV, dim=1) / devsC
 
         value = 1 - torch.sqrt(torch.pow(r - 1, 2) + torch.pow(alpha - 1, 2) + torch.pow(beta - 1, 2))
         value = torch.mean(torch.nan_to_num(value, 0, 0, 0))

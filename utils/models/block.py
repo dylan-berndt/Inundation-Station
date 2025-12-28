@@ -8,14 +8,14 @@ from torch_geometric.utils import scatter
 
 
 class APPNP(nn.Module):
-    def __init__(self, config: Config):
+    def __init__(self, in_channels, out_channels, k, alpha):
         super().__init__()
         self.mlp = torch.nn.Sequential(
-            torch.nn.Linear(config.in_channels, config.out_channels),
+            torch.nn.Linear(in_channels, out_channels),
             torch.nn.ReLU(),
-            torch.nn.Linear(config.out_channels, config.out_channels)
+            torch.nn.Linear(out_channels, out_channels)
         )
-        self.appnp = gnn.APPNP(k=config.k, alpha=config.alpha)
+        self.appnp = gnn.APPNP(K=k, alpha=alpha)
 
     def forward(self, x, edge_index, edge_weight):
         x = self.mlp(x)
@@ -158,7 +158,8 @@ class InundationBlockCoder(nn.Module):
 
         for b, block in enumerate(self.blocks):
             coded, newState = block(projected, inputs.edge_index, state)
-            projected = projected + coded
+            # Removed residual
+            projected = coded
 
         batchIndices = torch.concatenate([torch.tensor([0]).to(projected.device), torch.cumsum(inputs.nodes.to(projected.device), dim=0)[:-1]], dim=0)
         sampledBasin = projected[batchIndices, :, :]

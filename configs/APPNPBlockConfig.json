@@ -10,70 +10,70 @@
     "appendDimensionPath": "encoder.block.gnnLSTM.outChannels",
     "encoder": {
         "basinProjection": {
-            "discreteDim": 4,
+            "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 64
+            "outputDim": 128
         },
         "riverProjection": {
-            "discreteDim": 4,
+            "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 64
+            "outputDim": 128
         },
         "block": {
             "gnnLSTM": {
                 "gnnType": "APPNP",
                 "gnn": {
-                    "in_channels": 64,
-                    "out_channels": 64,
+                    "in_channels": 128,
+                    "out_channels": 128,
                     "k": 10,
                     "alpha": 0.1
                 },
-                "inChannels": 64,
-                "outChannels": 64,
+                "inChannels": 128,
+                "outChannels": 128,
                 "dropout": 0.2
             }
         },
         "blocks": 2,
         "head": {
-            "inputDim": 64,
+            "inputDim": 128,
             "hiddenDim": 256,
-            "mixtures": 12
+            "mixtures": 4
         }
     },
     "bridge": {
-        "in_features": 64,
-        "out_features": 64
+        "in_features": 128,
+        "out_features": 128
     },
     "decoder": {
         "basinProjection": {
-            "discreteDim": 4,
+            "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 64
+            "outputDim": 128
         },
         "riverProjection": {
-            "discreteDim": 4,
+            "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 64
+            "outputDim": 128
         },
         "block": {
             "gnnLSTM": {
                 "gnnType": "APPNP",
                 "gnn": {
-                    "in_channels": 64,
-                    "out_channels": 64,
+                    "in_channels": 128,
+                    "out_channels": 128,
                     "k": 10,
                     "alpha": 0.1
                 },
-                "inChannels": 64,
-                "outChannels": 64,
+                "inChannels": 128,
+                "outChannels": 128,
                 "dropout": 0.2
             }
         },
         "blocks": 2,
         "head": {
-            "inputDim": 64,
+            "inputDim": 128,
             "hiddenDim": 256,
-            "mixtures": 12
+            "mixtures": 4
         }
     },
     "variables": {

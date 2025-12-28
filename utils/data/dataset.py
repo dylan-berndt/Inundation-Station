@@ -51,11 +51,18 @@ def calculateReturnPeriods(df, periods=None, maximums=True):
     return returnVals.values()
 
 
+# def defaultNoise(minNoise, maxNoise):
+#     def noiseData(data, axis=1):
+#         noiseMult = torch.linspace(minNoise, maxNoise, data.shape[axis])
+#         noise = torch.rand_like(data) * noiseMult.unsqueeze(0)
+#         return data + noise
+
+#     return noiseData
+
+
 def defaultNoise(minNoise, maxNoise):
     def noiseData(data, axis=1):
-        noiseMult = torch.linspace(minNoise, maxNoise, data.shape[axis])
-        noise = torch.rand_like(data) * noiseMult.unsqueeze(0)
-        return data + noise
+        return data
 
     return noiseData
 
