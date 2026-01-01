@@ -25,7 +25,7 @@
                 "gnn": {
                     "in_channels": 128,
                     "out_channels": 128,
-                    "K": 2
+                    "K": 5
                 },
                 "inChannels": 128,
                 "outChannels": 128,
@@ -60,7 +60,7 @@
                 "gnn": {
                     "in_channels": 128,
                     "out_channels": 128,
-                    "K": 2
+                    "K": 5
                 },
                 "inChannels": 128,
                 "outChannels": 128,
