@@ -356,6 +356,26 @@ class Pearson(nn.Module):
         return self.agg(torch.stack(coefs, dim=0))
     
 
+class Pearson2(nn.Module):
+    def __init__(self, aggregation=None):
+        super().__init__()
+        self.agg = identity if aggregation is None else aggregation
+
+    def forward(self, x, y):
+        x, y = x.flatten(start_dim=1), y.flatten(start_dim=1)
+        n = x.shape[1] - 1
+        xs = torch.std(x, dim=1, keepdim=True)
+        ys = torch.std(y, dim=1, keepdim=True)
+
+        xc = x - torch.mean(x, dim=1, keepdim=True)
+        yc = y - torch.mean(y, dim=1, keepdim=True)
+
+        cov = torch.sum(xc * yc, dim=1, keepdim=True)
+        pcc = cov / (xs * ys + 1e-6)
+
+        return pcc / n
+    
+
 class CMALKGE(nn.Module):
     def __init__(self, batches=100):
         super().__init__()
