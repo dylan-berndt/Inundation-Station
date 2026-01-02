@@ -21,9 +21,40 @@ class APPNP(nn.Module):
         x = self.mlp(x)
         x = self.appnp(x, edge_index, edge_weight)
         return x
+    
+
+class GCNStack(nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+
+        convArgs = kwargs.copy()
+        convArgs.pop("layers")
+
+        self.convs = nn.ModuleList([gnn.GCNConv(**convArgs) for _ in range(kwargs["layers"])])
+
+    def forward(self, x, edge_index, edge_weight):
+        for i in range(len(self.convs)):
+            x = self.convs[i](x, edge_index, edge_weight)
+        
+        return x
+
+class GATStack(nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+
+        convArgs = kwargs.copy()
+        convArgs.pop("layers")
+
+        self.convs = nn.ModuleList([gnn.GATv2Conv(**convArgs) for _ in range(kwargs["layers"])])
+
+    def forward(self, x, edge_index, edge_weight):
+        for i in range(len(self.convs)):
+            x = self.convs[i](x, edge_index, edge_weight)
+        
+        return x
 
 
-gnnResolution = {"GAT": gnn.GATv2Conv, "GPS": GPS, "GIN": gnn.GINConv, "GCN": gnn.GCN2Conv, "Cheb": gnn.conv.ChebConv, "APPNP": APPNP}
+gnnResolution = {"GAT": GATStack, "GPS": GPS, "GIN": gnn.GINConv, "GCN": GCNStack, "Cheb": gnn.conv.ChebConv, "APPNP": APPNP}
 
 
 class GNNLSTM(nn.Module):
@@ -35,7 +66,12 @@ class GNNLSTM(nn.Module):
             config.gnnType = "GAT"
             config.gat = config.gnn
 
-        self.convs = nn.ModuleList([gnnResolution[config.gnnType](**config.gnn).to(device="cuda") for _ in range(4)])
+        convs = []
+        for _ in range(4):
+            conv = gnnResolution[config.gnnType](**config.gnn)
+            convs.append(conv)
+
+        self.convs = nn.ModuleList(convs)
         self.weights = nn.ParameterList([nn.Parameter(torch.Tensor(config.inChannels, config.outChannels)) for _ in range(4)])
         self.biases = nn.ParameterList([nn.Parameter(torch.Tensor(1, config.outChannels)) for _ in range(4)])
 
@@ -107,7 +143,7 @@ class InundationBlock(nn.Module):
         if "gnnLSTM" not in config:
             config.gnnLSTM = config.gatLSTM
 
-        self.gatLSTM = GNNLSTM(config.gnnLSTM).to("cuda")
+        self.gatLSTM = GNNLSTM(config.gnnLSTM)
 
         self.hiddenBridge = nn.Sequential(
             nn.Linear(config.gnnLSTM.outChannels, config.gnnLSTM.outChannels),
