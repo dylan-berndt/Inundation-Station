@@ -379,7 +379,7 @@ class Pearson2(nn.Module):
 class CMALKGE(nn.Module):
     def __init__(self, batches=100):
         super().__init__()
-        self.pearson = Pearson()
+        self.pearson = Pearson2()
         self.batches = []
         self.numBatches = batches
 
