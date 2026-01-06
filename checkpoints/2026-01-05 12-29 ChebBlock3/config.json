@@ -1,7 +1,7 @@
 {
     "path": "data",
     "batchSize": 8,
-    "nodesPerBatch": 8000,
+    "nodesPerBatch": 4000,
     "dataSplit": 0.8,
     "history": 60,
     "future": 7,
@@ -12,12 +12,42 @@
         "basinProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 128,
+            "continuousDim": 284,
+            "discreteRange": [
+                18,
+                125,
+                23,
+                16,
+                13,
+                15,
+                755,
+                14,
+                417,
+                16
+            ]
         },
         "riverProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 128,
+            "continuousDim": 386,
+            "discreteRange": [
+                2,
+                9,
+                7,
+                9,
+                15,
+                100,
+                16,
+                13,
+                10,
+                12,
+                118,
+                8,
+                82,
+                14
+            ]
         },
         "block": {
             "gnnLSTM": {
@@ -25,7 +55,7 @@
                 "gnn": {
                     "in_channels": 128,
                     "out_channels": 128,
-                    "K": 10
+                    "K": 3
                 },
                 "inChannels": 128,
                 "outChannels": 128,
@@ -47,12 +77,42 @@
         "basinProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 128,
+            "continuousDim": 284,
+            "discreteRange": [
+                18,
+                125,
+                23,
+                16,
+                13,
+                15,
+                755,
+                14,
+                417,
+                16
+            ]
         },
         "riverProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 128,
+            "continuousDim": 386,
+            "discreteRange": [
+                2,
+                9,
+                7,
+                9,
+                15,
+                100,
+                16,
+                13,
+                10,
+                12,
+                118,
+                8,
+                82,
+                14
+            ]
         },
         "block": {
             "gnnLSTM": {
@@ -60,7 +120,7 @@
                 "gnn": {
                     "in_channels": 128,
                     "out_channels": 128,
-                    "K": 10
+                    "K": 3
                 },
                 "inChannels": 128,
                 "outChannels": 128,

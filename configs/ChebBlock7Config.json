@@ -1,7 +1,7 @@
 {
     "path": "data",
     "batchSize": 8,
-    "nodesPerBatch": 8000,
+    "nodesPerBatch": 2000,
     "dataSplit": 0.8,
     "history": 60,
     "future": 7,
@@ -25,7 +25,7 @@
                 "gnn": {
                     "in_channels": 128,
                     "out_channels": 128,
-                    "K": 15
+                    "K": 7
                 },
                 "inChannels": 128,
                 "outChannels": 128,
@@ -60,7 +60,7 @@
                 "gnn": {
                     "in_channels": 128,
                     "out_channels": 128,
-                    "K": 15
+                    "K": 7
                 },
                 "inChannels": 128,
                 "outChannels": 128,
