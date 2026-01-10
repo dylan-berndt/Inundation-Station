@@ -1,7 +1,7 @@
 {
     "path": "data",
     "batchSize": 8,
-    "nodesPerBatch": 4000,
+    "nodesPerBatch": 2000,
     "dataSplit": 0.8,
     "history": 60,
     "future": 7,

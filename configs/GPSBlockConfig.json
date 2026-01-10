@@ -24,7 +24,7 @@
                 "gnnType": "GPS",
                 "gnn": {
                     "channels": 128,
-                    "layers": 2,
+                    "layers": 4,
                     "attn_type": "multihead",
                     "heads": 4
                 },
@@ -60,7 +60,7 @@
                 "gnnType": "GPS",
                 "gnn": {
                     "channels": 128,
-                    "layers": 2,
+                    "layers": 4,
                     "attn_type": "multihead",
                     "heads": 4
                 },
