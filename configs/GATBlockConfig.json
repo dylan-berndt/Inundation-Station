@@ -24,11 +24,11 @@
                 "gnnType": "GAT",
                 "gnn": {
                     "in_channels": 128,
-                    "out_channels": 128,
+                    "out_channels": 32,
                     "heads": 4,
                     "layers": 5,
                     "residual": true,
-                    "concat": false
+                    "concat": true
                 },
                 "inChannels": 128,
                 "outChannels": 128,
@@ -62,11 +62,11 @@
                 "gnnType": "GAT",
                 "gnn": {
                     "in_channels": 128,
-                    "out_channels": 128,
+                    "out_channels": 32,
                     "heads": 4,
                     "layers": 5,
                     "residual": true,
-                    "concat": false
+                    "concat": true
                 },
                 "inChannels": 128,
                 "outChannels": 128,
