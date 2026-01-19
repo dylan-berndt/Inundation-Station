@@ -100,10 +100,8 @@ class SingleProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.encodingDim = config.continuousDim
-
         self.dropout = nn.Dropout(config.dropout)
-        self.fc = nn.Linear(self.encodingDim, config.outputDim)
+        self.fc = nn.LazyLinear(config.outputDim)
 
     def forward(self, x):
         encodings = self.dropout(self.fc(x))
@@ -116,20 +114,18 @@ class DualProjection(nn.Module):
         super().__init__()
 
         self.embeddings = nn.ModuleList([
-            nn.Embedding(varRange, config.discreteDim) for varRange in config.discreteRange
+            nn.Embedding(1000, config.discreteDim) for varRange in range(100)
         ])
-
-        self.encodingDim = config.discreteDim * len(config.discreteRange) + config.continuousDim
 
         self.dropout = nn.Dropout(config.dropout)
         self.fc = nn.Sequential(
-            nn.Linear(self.encodingDim, config.outputDim),
+            nn.LazyLinear(config.outputDim),
             nn.ReLU(),
             nn.Linear(config.outputDim, config.outputDim)
         )
 
     def forward(self, c, d):
-        embeddings = [emb(d[:, :, i]) for i, emb in enumerate(self.embeddings)]
+        embeddings = [self.embeddings[i](d[:, :, i]) for i in range(d.shape[-1])]
         embeddings = torch.cat(embeddings, dim=-1)
 
         encodings = torch.cat([embeddings, c], dim=-1)
@@ -163,6 +159,38 @@ class CMAL(nn.Module):
         p = (1 - self.eps) * torch.softmax(p, dim=-1) + self.eps
 
         return m, b, t, p
+    
+    @staticmethod
+    def sample(mu, beta, tau, pi, numSamples):
+        batchSize, timesteps, components = mu.shape
+
+        mu = torch.repeat_interleave(mu, numSamples, dim=0)
+        beta = torch.repeat_interleave(beta, numSamples, dim=0)
+        tau = torch.repeat_interleave(tau, numSamples, dim=0)
+        pi = torch.repeat_interleave(pi, numSamples, dim=0)
+
+        samples = torch.zeros(batchSize * numSamples, timesteps).to(mu.device)
+        
+        for t in range(timesteps):
+            choices = torch.multinomial(pi[:, t, :], num_samples=1)
+
+            tChosen = tau[:, t, :].gather(1, choices)
+            mChosen = mu[:, t, :].gather(1, choices)
+            bChosen = beta[:, t, :].gather(1, choices)
+
+            u = torch.rand_like(mChosen).clamp(1e-6, 1 - 1e-6).to(mu.device)
+
+            samples[:, t] = (mChosen + bChosen * (
+                torch.where(
+                    u < tChosen,
+                    torch.log(u / tChosen) / (1 - tChosen),
+                    -torch.log((1 - u) / (1 - tChosen)) / tChosen
+                )
+            )).flatten()
+
+        samples = samples.reshape(batchSize, numSamples, timesteps).transpose(1, 2)
+
+        return samples
 
     @staticmethod
     def median(params):
@@ -171,7 +199,7 @@ class CMAL(nn.Module):
         median[t > 1] = (m + ((t / b) * torch.log((1 + torch.pow(t, 2)) / (2 * torch.pow(t, 2)))))[t > 1]
         median[t <= 1] = (m - ((1 / (b * t)) * torch.log((1 + torch.pow(t, 2)) / 2)))[t <= 1]
         median = torch.sum(median * p, dim=-1)
-        return torch.sum(m * p, dim=-1)
+        return median
 
     @staticmethod
     def mean(params):

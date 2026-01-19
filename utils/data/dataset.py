@@ -419,15 +419,15 @@ class InundationData(Dataset):
         self.riverContinuous = self.riverContinuous.dropna(axis=1)
         self.riverDiscrete = self.riverDiscrete.dropna(axis=1)
 
-        config.encoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
-        config.decoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
-        config.encoder.riverProjection.continuousDim = len(self.riverContinuous.columns) + config[config.appendDimensionPath]
-        config.decoder.riverProjection.continuousDim = len(self.riverContinuous.columns) + config[config.appendDimensionPath]
+        # config.encoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
+        # config.decoder.basinProjection.continuousDim = len(self.basinContinuous.columns) + len(self.era5Scales.keys())
+        # config.encoder.riverProjection.continuousDim = len(self.riverContinuous.columns) + config[config.appendDimensionPath]
+        # config.decoder.riverProjection.continuousDim = len(self.riverContinuous.columns) + config[config.appendDimensionPath]
 
-        config.encoder.basinProjection.discreteRange = self.basinDiscreteColumnRanges
-        config.decoder.basinProjection.discreteRange = self.basinDiscreteColumnRanges
-        config.encoder.riverProjection.discreteRange = self.riverDiscreteColumnRanges
-        config.decoder.riverProjection.discreteRange = self.riverDiscreteColumnRanges
+        # config.encoder.basinProjection.discreteRange = self.basinDiscreteColumnRanges
+        # config.decoder.basinProjection.discreteRange = self.basinDiscreteColumnRanges
+        # config.encoder.riverProjection.discreteRange = self.riverDiscreteColumnRanges
+        # config.decoder.riverProjection.discreteRange = self.riverDiscreteColumnRanges
 
         for grdcID in self.grdcDict:
             riverContinuous = torch.tensor(self.riverContinuous.loc[grdcID].to_numpy(), dtype=torch.float32)

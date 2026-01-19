@@ -9,8 +9,17 @@ class Transform:
 
 
 def streamflowProcess(targets):
-    t = np.log10(targets + 1e-6)
-    mean = np.mean(t)
-    std = np.std(t)
-    return Transform(lambda x: (torch.log10(x + 1e-6) - mean) / std, 
-                     lambda x: torch.pow(10, (std * x) + mean) - 1e-6)
+    # t = np.log10(targets + 1e-6)
+    mean = np.mean(targets)
+    std = np.std(targets)
+    return Transform(lambda x: (x - mean) / std, 
+                     lambda x: (std * x) + mean)
+
+
+if __name__ == "__main__":
+    a = torch.randn([3, 4]) / 40
+    b = np.random.randn(3, 4) / 40
+    a = torch.clip(a, 0)
+    b = np.clip(b, 0, np.inf)
+    t = streamflowProcess(b)
+    print(a, t.forward(a), t.backward(a), t.backward(t.forward(a)), t.forward(t.backward(a)))

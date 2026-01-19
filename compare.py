@@ -66,20 +66,19 @@ def plotMetrics(floodHubMetrics, modelMetrics, config):
             plt.title(labels[i])
             modelF1 = model[m][:, :, i].T
             modelF1 = [box[~np.isnan(box)] for box in modelF1]
-            modelPlot = plt.boxplot(modelF1, positions=np.arange(7) + 0.25, widths=0.5, label="GNN Model", patch_artist=True)
+            modelPlot = plt.boxplot(modelF1, positions=np.arange(7) + 0.25, widths=0.5, label="GNN Model", patch_artist=True, showfliers=False)
             floodF1 = flood[m][:, :, i].T
             floodF1 = [box[~np.isnan(box)] for box in floodF1]
-            floodPlot = plt.boxplot(floodF1, positions=np.arange(7) - 0.25, widths=0.5, label="Flood Hub", patch_artist=True)
-            plt.ylim(0, 1)
+            floodPlot = plt.boxplot(floodF1, positions=np.arange(7) - 0.25, widths=0.5, label="Flood Hub", patch_artist=True, showfliers=False)
 
-            mod = model[m][:, :, i]
-            flh = flood[m][:, :, i]
-            modMask = ~np.isnan(mod)
-            modVal = np.where(modMask, mod, 0)
-            flhMask = ~np.isnan(flh)
-            flhVal = np.where(flhMask, flh, 0)
-            plt.plot(np.arange(7), np.sum(modVal, axis=0) / np.sum(modMask, axis=0), c='tab:blue')
-            plt.plot(np.arange(7), np.sum(flhVal, axis=0) / np.sum(flhMask, axis=0), c='tab:orange')
+            # mod = model[m][:, :, i]
+            # flh = flood[m][:, :, i]
+            # modMask = ~np.isnan(mod)
+            # modVal = np.where(modMask, mod, 0)
+            # flhMask = ~np.isnan(flh)
+            # flhVal = np.where(flhMask, flh, 0)
+            # plt.plot(np.arange(7), np.sum(modVal, axis=0) / np.sum(modMask, axis=0), c='tab:blue')
+            # plt.plot(np.arange(7), np.sum(flhVal, axis=0) / np.sum(flhMask, axis=0), c='tab:orange')
 
             for patch in modelPlot['boxes']:
                 patch.set_facecolor('tab:blue')
@@ -148,8 +147,8 @@ def plotMetrics(floodHubMetrics, modelMetrics, config):
     plt.show()
 
 
-floodHubPath = os.path.join("checkpoints", "2025-07-09")
-modelPath = os.path.join("checkpoints", "2025-07-16")
+floodHubPath = os.path.join("checkpoints", "2026-01-04 19-02 floodHub")
+modelPath = os.path.join("checkpoints", "2026-01-06 20-50 ChebBlock5")
 # config = Config().load(os.path.join(modelPath, "config.json"))
 
 with open(os.path.join(floodHubPath, "metrics.json")) as file:
@@ -157,6 +156,12 @@ with open(os.path.join(floodHubPath, "metrics.json")) as file:
 
 with open(os.path.join(modelPath, "metrics.json")) as file:
     modelMetrics = json.load(file)
+
+paths = ["2026-01-04 19-02 floodHub", "2026-01-05 12-29 ChebBlock3", "2026-01-06 20-50 ChebBlock5",
+         "2026-01-09 07-45 ChebBlock7", "2026-01-11 15-24 GCNBlock"]
+names = ["Flood Hub", "ChebConv K=3", "ChebConv K=5", "ChebConv K=7", "GCNConv K=5"]
+
+# metrics = {names[i]: json.load(open(os.path.join("checkpoints", paths[i], "metrics.json"))) for i in range(len(paths))}
 
 
 class Ugh:
