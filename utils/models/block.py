@@ -39,6 +39,9 @@ class GCNStack(nn.Module):
     def forward(self, x, edge_index, edge_weight):
         for i, (conv, norm, dropout) in enumerate(zip(self.convs, self.norms, self.dropout)):
             y = conv(x, edge_index, edge_weight)
+            if i == len(self.convs) - 1:
+                x = x + y
+                continue
             y = norm(y)
             y = self.relu(y)
             y = dropout(y)
