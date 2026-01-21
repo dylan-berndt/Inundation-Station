@@ -31,10 +31,18 @@ class GCNStack(nn.Module):
         convArgs.pop("layers")
 
         self.convs = nn.ModuleList([gnn.GCNConv(**convArgs) for _ in range(kwargs["layers"])])
+        self.norms = nn.ModuleList([nn.LayerNorm(convArgs["out_channels"]) for _ in range(kwargs["layers"])])
+        self.dropout = nn.ModuleList([nn.Dropout(0.2) for _ in range(kwargs["layers"])])
+
+        self.relu = nn.ReLU()
 
     def forward(self, x, edge_index, edge_weight):
-        for i in range(len(self.convs)):
-            x = self.convs[i](x, edge_index, edge_weight)
+        for i, (conv, norm, dropout) in enumerate(zip(self.convs, self.norms, self.dropout)):
+            y = conv(x, edge_index, edge_weight)
+            y = norm(y)
+            y = self.relu(y)
+            y = dropout(y)
+            x = x + y
         
         return x
 

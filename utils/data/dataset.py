@@ -266,7 +266,7 @@ class InundationData(Dataset):
         graph = nx.DiGraph()
         for i, row in self.basinATLAS.iterrows():
             upstream = row
-            graph.add_edge(str(upstream["PFAF_ID"]), str(upstream["PFAF_ID"]))
+            # graph.add_edge(str(upstream["PFAF_ID"]), str(upstream["PFAF_ID"]))
 
             if pd.isna(upstream["NEXT_DOWN"]) or upstream["NEXT_DOWN"] == 0:
                 continue
@@ -285,7 +285,7 @@ class InundationData(Dataset):
         print()
 
         self.upstreamBasins = {
-            node: [node] + list(nx.ancestors(graph, node)) for node in self.pfafDict.keys()
+            node: [node] + sorted(list(nx.ancestors(graph, node))) for node in self.pfafDict.keys()
         }
 
         # Removing basins, rivers with upstream basins outside North America
@@ -332,6 +332,16 @@ class InundationData(Dataset):
             self.upstreamStructure[node] = newEdges
         print("Structure Tensors Complete")
 
+        self.hopDistances = {}
+        for node in self.pfafDict.keys():
+            upstreamNodes = self.upstreamBasins[node]
+            subgraph = self.graph.subgraph(upstreamNodes)
+
+            distances = nx.single_target_shortest_path_length(subgraph, node)
+
+            hops = [distances.get(source, 0) for source in upstreamNodes]
+            self.hopDistances[node] = hops
+
         # TODO: Verify stability with downsampling
 
         allTargets = []
@@ -340,6 +350,10 @@ class InundationData(Dataset):
         self.indexMap = []
         self.offsetMap = []
         self.graphSizes = []
+
+        basinAreas = []
+        areaDiffs = []
+
         for key in list(self.grdcDict.keys()):
             upstreamBasins = nx.ancestors(graph, self.translateDict[key])
             areas = [basinArea.loc[int(self.translateDict[key])]["SUB_AREA"]] + [basinArea.loc[int(basinID)]["SUB_AREA"] for basinID in upstreamBasins]
@@ -354,6 +368,9 @@ class InundationData(Dataset):
             areaDiff = abs(calculatedArea - self.grdcDict[key]["Catchment"]) / self.grdcDict[key]["Catchment"]
             self.grdcDict[key]["AreaDiff"] = areaDiff
 
+            basinAreas.append(self.grdcDict[key]["Catchment"])
+            areaDiffs.append(areaDiff)
+
             if (areaDiff > 0.2 or self.grdcDict[key]["Catchment"] < 0) and config.excludeDiffBasins:
                 del self.grdcDict[key]
                 continue
@@ -366,6 +383,18 @@ class InundationData(Dataset):
             self.indexMap.extend([key] * seriesLength)
             self.offsetMap.extend(range(seriesLength))
             self.graphSizes.extend([len(self.upstreamBasins[translateDict[key]])] * seriesLength)
+
+        if display:
+            plt.hist(areaDiffs)
+            plt.ylabel("Count")
+            plt.xlabel("Area Error")
+            plt.show()
+
+            plt.scatter(basinAreas, areaDiffs)
+            plt.xlabel("Actual Area")
+            plt.ylabel("Area Error")
+            plt.grid()
+            plt.show()
 
         self.targetMean = np.mean(allTargets)
         self.transform = streamflowProcess(np.array(allTargets))
@@ -507,6 +536,7 @@ class InundationData(Dataset):
         riverDiscrete = self.grdcDict[grdcID]["atlasDiscrete"]
 
         structure = torch.transpose(torch.tensor(self.upstreamStructure[pfafID], dtype=torch.long), 0, 1).contiguous()
+        hops = torch.tensor(self.hopDistances[pfafID], dtype=torch.long)
 
         with record_function("basin_nan"):
             basinContinuous, basinDiscrete = torch.nan_to_num(basinContinuous), torch.nan_to_num(basinDiscrete, 0, 0, 0)
@@ -520,6 +550,7 @@ class InundationData(Dataset):
             basinContinuous=basinContinuous,
             basinDiscrete=basinDiscrete,
             edge_index=structure,
+            hopDistance=hops,
 
             riverContinuous=riverContinuous,
             riverDiscrete=riverDiscrete,
@@ -536,6 +567,7 @@ class InundationData(Dataset):
             basinContinuous=basinContinuous,
             basinDiscrete=basinDiscrete,
             edge_index=structure,
+            hopDistance=hops,
 
             riverContinuous=riverContinuous,
             riverDiscrete=riverDiscrete,
@@ -581,15 +613,16 @@ class InundationData(Dataset):
 
         print(data)
 
-    def display(self, sample=None, lat=None, lon=None):
-        if lat is None:
+    def display(self, sample=None, grdcID=None):
+        # THEBES: 4127501
+        if grdcID is None:
             sample = self[0] if sample is None else sample
             (past, future), targets = sample
             grdcIDs = past.grdcID
             if type(grdcIDs) != list:
                 grdcIDs = [grdcIDs]
         else:
-            grdcIDs = []
+            grdcIDs = [grdcID]
 
         rivers = self.riverSHP.loc[grdcIDs]
         # Mercator: 3395

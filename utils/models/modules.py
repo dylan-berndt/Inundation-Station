@@ -59,6 +59,19 @@ class GPS(nn.Module):
             inputs = conv(inputs, edge_index=edges)
 
         return inputs
+    
+
+class LearnedPositionalEncoding(nn.Module):
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 200, batch_first=False):
+        super().__init__()
+        self.batch_first = batch_first
+
+        self.dropout = nn.Dropout(p=dropout)
+        self.embedding = nn.Embedding(max_len, d_model)
+
+    def forward(self, x, i):
+        x = x + self.embedding(i)
+        return self.dropout(x)
 
 
 class IndexedPositionalEncoding(nn.Module):

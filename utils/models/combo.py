@@ -59,6 +59,8 @@ class ComboGNNCoder(nn.Module):
         super().__init__()
         self.config = config
 
+        self.positional = LearnedPositionalEncoding(config.embedDim)
+
         self.basinProjection = DualProjection(config.basinProjection)
         self.riverProjection = DualProjection(config.riverProjection)
 
@@ -70,11 +72,10 @@ class ComboGNNCoder(nn.Module):
         basinDiscrete = inputs.basinDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
         basinProjected = torch.concatenate([inputs.era5, basinContinuous], dim=-1)
         projected = self.basinProjection(basinProjected, basinDiscrete)
+        positional = self.positional(projected)
 
         for b, block in enumerate(self.blocks):
-            coded, newState = block(projected, inputs.edge_index, state)
-            # Removed residual
-            projected = coded
+            positional, newState = block(positional, inputs.edge_index, state)
 
         batchIndices = torch.concatenate([torch.tensor([0]).to(projected.device), torch.cumsum(inputs.nodes.to(projected.device), dim=0)[:-1]], dim=0)
         sampledBasin = projected[batchIndices, :, :]

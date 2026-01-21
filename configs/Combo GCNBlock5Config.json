@@ -9,6 +9,7 @@
     "excludeDiffBasins": true,
     "appendDimensionPath": "gnnEncoder.block.gnnLSTM.outChannels",
     "gnnEncoder": {
+        "embedDim": 128,
         "basinProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
@@ -56,6 +57,7 @@
         "out_features": 128
     },
     "gnnDecoder": {
+        "embedDim": 128,
         "basinProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
