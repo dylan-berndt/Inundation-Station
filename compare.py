@@ -4,57 +4,52 @@ import copy
 import json
 import matplotlib.pyplot as plt
 import os
+import math
 
 
-def plotMetrics(floodHubMetrics, modelMetrics, config):
-    model = {
-        "recall": np.zeros([len(modelMetrics), config.future, 4]),
-        "precision": np.zeros([len(modelMetrics), config.future, 4]),
-        "f1": np.zeros([len(modelMetrics), config.future, 4]),
-        "y": np.zeros([len(modelMetrics), 4])
+def calcMetrics(metricSet):
+    calculated = {
+        "recall": np.zeros([len(metricSet), 4]),
+        "precision": np.zeros([len(metricSet), 4]),
+        "f1": np.zeros([len(metricSet), 4]),
+        "x": np.zeros([len(metricSet), 4]),
+        "y": np.zeros([len(metricSet), 4]),
+        "nse": np.zeros([len(metricSet)]),
+        "kge": np.zeros([len(metricSet)])
     }
-    flood = copy.deepcopy(model)
 
-    nodeX = np.zeros([len(modelMetrics), 4])
-    modelY = np.zeros([len(modelMetrics), 4])
-    floodY = np.zeros([len(modelMetrics), 4])
+    for i, name in enumerate(metricSet):
+        calculated["x"][i, :] = metricSet[name]["nodes"]
 
-    for i, name in enumerate(modelMetrics):
-        nodeX[i, :] = modelMetrics[name]["nodes"]
-
-        tp = np.array(modelMetrics[name]["tp"])
-        fp = np.array(modelMetrics[name]["fp"])
-        fn = np.array(modelMetrics[name]["fn"])
+        tp = np.array(metricSet[name]["tp"]).sum(axis=0)
+        fp = np.array(metricSet[name]["fp"]).sum(axis=0)
+        fn = np.array(metricSet[name]["fn"]).sum(axis=0)
 
         recall = tp / (tp + fn)
         precision = tp / (tp + fp)
 
         f1 = 2 * recall * precision / (recall + precision)
 
-        f1Mask = ~np.isnan(f1)
-        f1Val = np.where(f1Mask, f1, 0)
-        modelY[i, :] = np.nan_to_num(np.sum(f1Val, axis=0) / np.sum(f1Mask, axis=0), nan=0)
+        calculated["y"][i, :] = np.nan_to_num(f1, nan=0)
 
-        model["recall"][i] = recall
-        model["precision"][i] = precision
-        model["f1"][i] = f1
+        calculated["recall"][i] = recall
+        calculated["precision"][i] = precision
+        calculated["f1"][i] = f1
 
-        tp = np.array(floodHubMetrics[name]["tp"])
-        fp = np.array(floodHubMetrics[name]["fp"])
-        fn = np.array(floodHubMetrics[name]["fn"])
+        calculated["nse"][i] = 1 - (metricSet[name]["nseNum"] / metricSet[name]["nseDenom"])
 
-        recall = tp / (tp + fn)
-        precision = tp / (tp + fp)
+        alpha = metricSet[name]["predMean"] / metricSet[name]["targetMean"]
+        # I have mixed variance and deviation in my previous script. I am sorry.
+        beta = math.sqrt(metricSet[name]["predDev"]) / metricSet[name]["targetDev"]
+        corr = metricSet[name]["correlation"]
+        kge = 1 - math.sqrt((corr - 1) ** 2 + (alpha - 1) ** 2 + (beta - 1) ** 2)
+        calculated["kge"][i] = kge
 
-        f1 = 2 * recall * precision / (recall + precision)
+    return calculated
 
-        f1Mask = ~np.isnan(f1)
-        f1Val = np.where(f1Mask, f1, 0)
-        floodY[i, :] = np.nan_to_num(np.sum(f1Val, axis=0) / np.sum(f1Mask, axis=0), nan=0)
 
-        flood["recall"][i] = recall
-        flood["precision"][i] = precision
-        flood["f1"][i] = f1
+def plotMetrics(metrics, names, colors):
+    calculated = [calcMetrics(metricSet) for metricSet in metrics]
 
     plt.figure(figsize=(10, 6))
 
@@ -64,38 +59,20 @@ def plotMetrics(floodHubMetrics, modelMetrics, config):
         for i in range(4):
             plt.subplot(1, 4, i + 1)
             plt.title(labels[i])
-            modelF1 = model[m][:, :, i].T
-            modelF1 = [box[~np.isnan(box)] for box in modelF1]
-            modelPlot = plt.boxplot(modelF1, positions=np.arange(7) + 0.25, widths=0.5, label="GNN Model", patch_artist=True, showfliers=False)
-            floodF1 = flood[m][:, :, i].T
-            floodF1 = [box[~np.isnan(box)] for box in floodF1]
-            floodPlot = plt.boxplot(floodF1, positions=np.arange(7) - 0.25, widths=0.5, label="Flood Hub", patch_artist=True, showfliers=False)
+            for j, metricSet in enumerate(calculated):
+                scores = metricSet[m][:, i].T
+                plot = plt.boxplot(scores, positions=j, widths=0.5, label=names[j], patch_artist=True, showfliers=False)
 
-            # mod = model[m][:, :, i]
-            # flh = flood[m][:, :, i]
-            # modMask = ~np.isnan(mod)
-            # modVal = np.where(modMask, mod, 0)
-            # flhMask = ~np.isnan(flh)
-            # flhVal = np.where(flhMask, flh, 0)
-            # plt.plot(np.arange(7), np.sum(modVal, axis=0) / np.sum(modMask, axis=0), c='tab:blue')
-            # plt.plot(np.arange(7), np.sum(flhVal, axis=0) / np.sum(flhMask, axis=0), c='tab:orange')
-
-            for patch in modelPlot['boxes']:
-                patch.set_facecolor('tab:blue')
-
-            for line in modelPlot['medians']:
-                line.set_color('black')
-
-            for patch in floodPlot['boxes']:
-                patch.set_facecolor('tab:orange')
-
-            for line in floodPlot['medians']:
-                line.set_color('black')
+                for patch in plot['boxes']:
+                    patch.set_facecolor(colors[j])
+            
+                for line in plot['medians']:
+                    line.set_color('black')
 
             plt.legend()
 
             plt.grid()
-            plt.xticks(np.arange(7), np.arange(7) + 1)
+            plt.xticks(np.arange(len(names)), names)
             plt.xlabel("Forecast Horizon")
             plt.ylabel(name)
 
@@ -105,40 +82,37 @@ def plotMetrics(floodHubMetrics, modelMetrics, config):
     plotMetric("recall", "Recall")
     plotMetric("precision", "Precision")
 
-    plt.figure(figsize=(10, 6))
-    for i in range(4):
-        plt.subplot(1, 4, i + 1)
-        plt.title(labels[i])
-        currentX = nodeX[:, i]
-        currentModelY = modelY[:, i]
-        currentFloodY = floodY[:, i]
-        plt.scatter(currentX, currentModelY, alpha=0.5, c='tab:blue')
-        plt.scatter(currentX, currentFloodY, alpha=0.5, c='tab:orange')
-        plt.ylim(0, 1)
+    # plt.figure(figsize=(10, 6))
+    # for i in range(4):
+    #     plt.subplot(1, 4, i + 1)
+    #     plt.title(labels[i])
+    #     currentX = nodeX[:, i]
+    #     currentModelY = modelY[:, i]
+    #     currentFloodY = floodY[:, i]
+    #     plt.scatter(currentX, currentModelY, alpha=0.5, c='tab:blue')
+    #     plt.scatter(currentX, currentFloodY, alpha=0.5, c='tab:orange')
+    #     plt.ylim(0, 1)
 
-        modelFit = np.polyfit(currentX, currentModelY, 1)
-        plt.plot(np.arange(np.max(currentX)), modelFit[0] * np.arange(np.max(currentX)) + modelFit[1], c='tab:blue', label="GNN Correlation")
+    #     modelFit = np.polyfit(currentX, currentModelY, 1)
+    #     plt.plot(np.arange(np.max(currentX)), modelFit[0] * np.arange(np.max(currentX)) + modelFit[1], c='tab:blue', label="GNN Correlation")
 
-        floodFit = np.polyfit(currentX, currentFloodY, 1)
-        plt.plot(np.arange(np.max(currentX)), floodFit[0] * np.arange(np.max(currentX)) + floodFit[1], c='tab:orange', label="Flood Hub Correlation")
+    #     floodFit = np.polyfit(currentX, currentFloodY, 1)
+    #     plt.plot(np.arange(np.max(currentX)), floodFit[0] * np.arange(np.max(currentX)) + floodFit[1], c='tab:orange', label="Flood Hub Correlation")
 
-        plt.legend()
+    #     plt.legend()
 
-        plt.grid()
-        plt.xlabel("Total Upstream Basin Nodes")
-        plt.ylabel("F1 Score")
+    #     plt.grid()
+    #     plt.xlabel("Total Upstream Basin Nodes")
+    #     plt.ylabel("F1 Score")
 
-    plt.show()
-
-    modelNSE = 1 - np.array([modelMetrics[name]["nseNum"] / modelMetrics[name]["nseDenom"] for name in modelMetrics])
-    modelCDF = np.array([np.sum(modelNSE < (threshold / 1000)) / len(modelNSE) for threshold in range(-1000, 1000)])
-
-    floodHubNSE = 1 - np.array([floodHubMetrics[name]["nseNum"] / floodHubMetrics[name]["nseDenom"] for name in floodHubMetrics])
-    floodHubCDF = np.array([np.sum(floodHubNSE < (threshold / 1000)) / len(floodHubNSE) for threshold in range(-1000, 1000)])
+    # plt.show()
 
     plt.figure(figsize=(6, 3))
-    plt.plot(np.arange(-1000, 1000) / 1000, modelCDF, label="GNN Model")
-    plt.plot(np.arange(-1000, 1000) / 1000, floodHubCDF, label="Flood Hub")
+
+    for i, metricSet in enumerate(calculated):
+        cdf = np.array([np.sum(metricSet["nse"] < (threshold / 1000)) / len(metricSet["nse"]) for threshold in range(-1000, 1000)])
+        plt.plot(np.arange(-1000, 1000) / 1000, cdf, label=names[i])
+
     plt.title("Cumulative Distribution of NSE")
     plt.xlabel("NSE")
     plt.ylabel("CDF")
@@ -146,30 +120,24 @@ def plotMetrics(floodHubMetrics, modelMetrics, config):
     plt.legend()
     plt.show()
 
+    plt.figure(figsize=(6, 3))
 
-floodHubPath = os.path.join("checkpoints", "2026-01-04 19-02 floodHub")
-modelPath = os.path.join("checkpoints", "2026-01-06 20-50 ChebBlock5")
-# config = Config().load(os.path.join(modelPath, "config.json"))
+    for i, metricSet in enumerate(calculated):
+        cdf = np.array([np.sum(metricSet["kge"] < (threshold / 1000)) / len(metricSet["kge"]) for threshold in range(-1000, 1000)])
+        plt.plot(np.arange(-1000, 1000) / 1000, cdf, label=names[i])
 
-with open(os.path.join(floodHubPath, "metrics.json")) as file:
-    floodHubMetrics = json.load(file)
-
-with open(os.path.join(modelPath, "metrics.json")) as file:
-    modelMetrics = json.load(file)
-
-paths = ["2026-01-04 19-02 floodHub", "2026-01-05 12-29 ChebBlock3", "2026-01-06 20-50 ChebBlock5",
-         "2026-01-09 07-45 ChebBlock7", "2026-01-11 15-24 GCNBlock"]
-names = ["Flood Hub", "ChebConv K=3", "ChebConv K=5", "ChebConv K=7", "GCNConv K=5"]
-
-# metrics = {names[i]: json.load(open(os.path.join("checkpoints", paths[i], "metrics.json"))) for i in range(len(paths))}
+    plt.title("Cumulative Distribution of KGE")
+    plt.xlabel("KGE")
+    plt.ylabel("CDF")
+    plt.grid()
+    plt.legend()
+    plt.show()
 
 
-class Ugh:
-    pass
+paths = ["", ""]
+names = ["", "Flood Hub"]
+colors = ["tab:blue", "tab:orange"]
 
+metrics = {names[i]: json.load(open(os.path.join("checkpoints", paths[i], "metrics.json"))) for i in range(len(paths))}
 
-config = Ugh()
-config.future = 7
-
-
-plotMetrics(floodHubMetrics, modelMetrics, config)
+plotMetrics(metrics, names, colors)
