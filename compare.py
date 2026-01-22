@@ -137,8 +137,8 @@ def plotMetrics(metrics, names, colors):
     plt.legend()
     plt.show()
 
-    tests = ["f1", "recall", "precision", "nmae", "nse", "kge"]
-    testNames = ["F1", "Recall", "Precision", "NMAE", "NSE", "KGE"]
+    tests = ["f1", "nmae", "nse", "kge"]
+    testNames = ["1 Year Flood F1", "2 Year Flood F1", "5 Year Flood F1", "10 Year Flood F1", "NMAE", "NSE", "KGE"]
     floodHubIndex = names.index("Flood Hub")
     floodHubMetrics = calculated[floodHubIndex]
 
@@ -154,14 +154,19 @@ def plotMetrics(metrics, names, colors):
             # Sort Y to perform paired test with Wilcoxon
             y = [y[floodHubMetrics["names"].index(name)] for name in calculated[i]["names"]]
 
-            pValue = wilcoxon(x, y, alternative="greater").pvalue
-            values.append(pValue)
-
+            if test == "f1":
+                for k in range(4):
+                    pValue = wilcoxon(x[:, k], y[:, k], alternative="greater").pvalue
+                    values.append(pValue)
+            else:
+                pValue = wilcoxon(x, y, alternative="greater").pvalue
+                values.append(pValue)
+            
         print(f"{names[i]} P-Values:", f"{" | ".join([f'{testNames[j]}: {values[j]}' for j in range(testNames)])}")
 
 
-paths = ["", ""]
-names = ["", "Flood Hub"]
+paths = ["2026-01-20 20-39 Combo GCNBlock5", "2026-01-20 23-27 FloodHub"]
+names = ["Combo GCNBlock5", "Flood Hub"]
 colors = ["tab:blue", "tab:orange"]
 
 metrics = {names[i]: json.load(open(os.path.join("checkpoints", paths[i], "metrics.json"))) for i in range(len(paths))}
