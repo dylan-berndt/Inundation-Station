@@ -17,7 +17,8 @@ def calcMetrics(metricSet):
         "nmae": np.zeros([len(metricSet)]),
         "nse": np.zeros([len(metricSet)]),
         "kge": np.zeros([len(metricSet)]),
-        "names": np.empty([len(metricSet)], dtype=object)
+        "names": np.empty([len(metricSet)], dtype=object),
+        "totalPositives": np.zeros([len(metricSet), 4])
     }
 
     for i, name in enumerate(metricSet):
@@ -27,10 +28,17 @@ def calcMetrics(metricSet):
         fp = np.array(metricSet[name]["fp"]).sum(axis=0)
         fn = np.array(metricSet[name]["fn"]).sum(axis=0)
 
+        totalPositives = tp + fn
+        calculated["totalPositives"][i] = totalPositives
+
         recall = tp / (tp + fn)
         precision = tp / (tp + fp)
 
-        f1 = 2 * recall * precision / (recall + precision + 1e-6)
+        f1 = np.where(totalPositives > 0,  # If there are ground truth positives
+                     np.where((tp + fp) > 0,  # and model made predictions
+                             2 * precision * recall / (precision + recall),
+                             0),  # model made no predictions = F1 of 0
+                     np.nan)
 
         calculated["nmae"][i] = np.mean(metricSet[name]["mae"])
 
@@ -54,6 +62,12 @@ def calcMetrics(metricSet):
 
 def plotMetrics(metrics, names, colors):
     calculated = [calcMetrics(metricSet) for metricSet in metrics]
+
+    basis = calculated[0]["totalPositives"]
+    for i in range(1, len(calculated)):
+        comparison = np.array([calculated[i]["totalPositives"][calculated[i]["names"].tolist().index(name)] for name in calculated[0]["names"]])
+        print(np.allclose(basis, comparison))
+        print(np.max(np.abs(basis - comparison), axis=0))
 
     plt.figure(figsize=(10, 6))
 
