@@ -72,7 +72,7 @@ class ComboGNNCoder(nn.Module):
         basinDiscrete = inputs.basinDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)
         basinProjected = torch.concatenate([inputs.era5, basinContinuous], dim=-1)
         projected = self.basinProjection(basinProjected, basinDiscrete)
-        positional = self.positional(projected)
+        positional = self.positional(projected, inputs.hopDistance)
 
         for b, block in enumerate(self.blocks):
             positional, newState = block(positional, inputs.edge_index, state)

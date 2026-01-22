@@ -266,7 +266,7 @@ class InundationData(Dataset):
         graph = nx.DiGraph()
         for i, row in self.basinATLAS.iterrows():
             upstream = row
-            # graph.add_edge(str(upstream["PFAF_ID"]), str(upstream["PFAF_ID"]))
+            graph.add_edge(str(upstream["PFAF_ID"]), str(upstream["PFAF_ID"]))
 
             if pd.isna(upstream["NEXT_DOWN"]) or upstream["NEXT_DOWN"] == 0:
                 continue
@@ -337,9 +337,11 @@ class InundationData(Dataset):
             upstreamNodes = self.upstreamBasins[node]
             subgraph = self.graph.subgraph(upstreamNodes)
 
-            distances = nx.single_target_shortest_path_length(subgraph, node)
-
-            hops = [distances.get(source, 0) for source in upstreamNodes]
+            hops = []
+            for source in upstreamNodes:
+                distance = nx.shortest_path_length(subgraph, source=source, target=node)
+                hops.append(distance)
+            
             self.hopDistances[node] = hops
 
         # TODO: Verify stability with downsampling

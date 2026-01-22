@@ -70,7 +70,12 @@ class LearnedPositionalEncoding(nn.Module):
         self.embedding = nn.Embedding(max_len, d_model)
 
     def forward(self, x, i):
-        x = x + self.embedding(i)
+        embedding = self.embedding(i)
+        try:
+            x = x + self.embedding(i).unsqueeze(1)
+        except:
+            print(x.shape, embedding.shape)
+            raise TypeError
         return self.dropout(x)
 
 
