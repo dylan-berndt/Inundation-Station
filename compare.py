@@ -13,15 +13,15 @@ def calcMetrics(metricSet):
         "recall": np.zeros([len(metricSet), 4]),
         "precision": np.zeros([len(metricSet), 4]),
         "f1": np.zeros([len(metricSet), 4]),
-        "x": np.zeros([len(metricSet), 4]),
-        "nmae": np.zeros([len(metricSet), 4]),
+        "nodes": np.zeros([len(metricSet)]),
+        "nmae": np.zeros([len(metricSet)]),
         "nse": np.zeros([len(metricSet)]),
         "kge": np.zeros([len(metricSet)]),
         "names": np.empty([len(metricSet)], dtype=object)
     }
 
     for i, name in enumerate(metricSet):
-        calculated["x"][i, :] = metricSet[name]["nodes"]
+        calculated["nodes"][i] = metricSet[name]["nodes"]
 
         tp = np.array(metricSet[name]["tp"]).sum(axis=0)
         fp = np.array(metricSet[name]["fp"]).sum(axis=0)
@@ -30,9 +30,9 @@ def calcMetrics(metricSet):
         recall = tp / (tp + fn)
         precision = tp / (tp + fp)
 
-        f1 = 2 * recall * precision / (recall + precision)
+        f1 = 2 * recall * precision / (recall + precision + 1e-6)
 
-        calculated["nmae"][i, :] = np.nan_to_num(f1, nan=0)
+        calculated["nmae"][i] = np.mean(metricSet[name]["mae"])
 
         calculated["recall"][i] = recall
         calculated["precision"][i] = precision
@@ -65,7 +65,8 @@ def plotMetrics(metrics, names, colors):
             plt.title(labels[i])
             for j, metricSet in enumerate(calculated):
                 scores = metricSet[m][:, i].T
-                plot = plt.boxplot(scores, positions=j, widths=0.5, label=names[j], patch_artist=True, showfliers=False)
+                scores = scores[~np.isnan(scores)]
+                plot = plt.boxplot(scores, positions=[j], widths=0.5, label=names[j], patch_artist=True, showfliers=False)
 
                 for patch in plot['boxes']:
                     patch.set_facecolor(colors[j])
@@ -73,11 +74,11 @@ def plotMetrics(metrics, names, colors):
                 for line in plot['medians']:
                     line.set_color('black')
 
-            plt.legend()
+            # plt.legend()
 
             plt.grid()
             plt.xticks(np.arange(len(names)), names)
-            plt.xlabel("Forecast Horizon")
+            plt.xlabel("Model")
             plt.ylabel(name)
 
         plt.show()
@@ -115,7 +116,7 @@ def plotMetrics(metrics, names, colors):
 
     for i, metricSet in enumerate(calculated):
         cdf = np.array([np.sum(metricSet["nse"] < (threshold / 1000)) / len(metricSet["nse"]) for threshold in range(-1000, 1000)])
-        plt.plot(np.arange(-1000, 1000) / 1000, cdf, label=names[i])
+        plt.plot(np.arange(-1000, 1000) / 1000, cdf, label=names[i], color=colors[i])
 
     plt.title("Cumulative Distribution of NSE")
     plt.xlabel("NSE")
@@ -128,7 +129,7 @@ def plotMetrics(metrics, names, colors):
 
     for i, metricSet in enumerate(calculated):
         cdf = np.array([np.sum(metricSet["kge"] < (threshold / 1000)) / len(metricSet["kge"]) for threshold in range(-1000, 1000)])
-        plt.plot(np.arange(-1000, 1000) / 1000, cdf, label=names[i])
+        plt.plot(np.arange(-1000, 1000) / 1000, cdf, label=names[i], color=colors[i])
 
     plt.title("Cumulative Distribution of KGE")
     plt.xlabel("KGE")
@@ -147,28 +148,36 @@ def plotMetrics(metrics, names, colors):
             continue
 
         values = []
+        samples = []
         for j, test in enumerate(tests):
             x = calculated[i][test]
             y = floodHubMetrics[test]
 
             # Sort Y to perform paired test with Wilcoxon
-            y = [y[floodHubMetrics["names"].index(name)] for name in calculated[i]["names"]]
+            y = np.array([y[floodHubMetrics["names"].tolist().index(name)] for name in calculated[i]["names"]])
 
             if test == "f1":
                 for k in range(4):
-                    pValue = wilcoxon(x[:, k], y[:, k], alternative="greater").pvalue
+                    xSample = x[:, k]
+                    ySample = y[:, k]
+                    mask = np.logical_and(~np.isnan(xSample), ~np.isnan(ySample))
+                    pValue = wilcoxon(xSample[mask], ySample[mask], alternative="greater").pvalue
+                    samples.append(np.sum(mask))
                     values.append(pValue)
             else:
-                pValue = wilcoxon(x, y, alternative="greater").pvalue
+                mask = np.logical_and(~np.isnan(x), ~np.isnan(y))
+
+                pValue = wilcoxon(x[mask], y[mask], alternative="greater" if test != "nmae" else "less").pvalue
+                samples.append(np.sum(mask))
                 values.append(pValue)
             
-        print(f"{names[i]} P-Values:", f"{" | ".join([f'{testNames[j]}: {values[j]}' for j in range(testNames)])}")
+        print(f"{names[i]} P-Values:\n\t{"\n\t".join([f'{testNames[j]} (N={samples[j]}): {values[j]:.3f}' for j in range(len(testNames))])}")
 
 
-paths = ["2026-01-20 20-39 Combo GCNBlock5", "2026-01-20 23-27 FloodHub"]
-names = ["Combo GCNBlock5", "Flood Hub"]
-colors = ["tab:blue", "tab:orange"]
+paths = ["2026-01-06 20-50 ChebBlock5", "2026-01-11 15-24 GCNBlock", "2026-01-04 19-02 floodHub"]
+names = ["Combo GCNBlock5", "GCNBlock5", "Flood Hub"]
+colors = ["tab:blue", "tab:cyan", "tab:orange"]
 
-metrics = {names[i]: json.load(open(os.path.join("checkpoints", paths[i], "metrics.json"))) for i in range(len(paths))}
+metrics = [json.load(open(os.path.join("checkpoints", paths[i], "metrics.json"))) for i in range(len(paths))]
 
 plotMetrics(metrics, names, colors)
