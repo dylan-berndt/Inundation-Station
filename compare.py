@@ -5,6 +5,7 @@ import json
 import matplotlib.pyplot as plt
 import os
 import math
+from scipy.stats import wilcoxon
 
 
 def calcMetrics(metricSet):
@@ -13,9 +14,10 @@ def calcMetrics(metricSet):
         "precision": np.zeros([len(metricSet), 4]),
         "f1": np.zeros([len(metricSet), 4]),
         "x": np.zeros([len(metricSet), 4]),
-        "y": np.zeros([len(metricSet), 4]),
+        "nmae": np.zeros([len(metricSet), 4]),
         "nse": np.zeros([len(metricSet)]),
-        "kge": np.zeros([len(metricSet)])
+        "kge": np.zeros([len(metricSet)]),
+        "names": np.empty([len(metricSet)], dtype=object)
     }
 
     for i, name in enumerate(metricSet):
@@ -30,7 +32,7 @@ def calcMetrics(metricSet):
 
         f1 = 2 * recall * precision / (recall + precision)
 
-        calculated["y"][i, :] = np.nan_to_num(f1, nan=0)
+        calculated["nmae"][i, :] = np.nan_to_num(f1, nan=0)
 
         calculated["recall"][i] = recall
         calculated["precision"][i] = precision
@@ -44,6 +46,8 @@ def calcMetrics(metricSet):
         corr = metricSet[name]["correlation"]
         kge = 1 - math.sqrt((corr - 1) ** 2 + (alpha - 1) ** 2 + (beta - 1) ** 2)
         calculated["kge"][i] = kge
+
+        calculated["names"][i] = name
 
     return calculated
 
@@ -132,6 +136,28 @@ def plotMetrics(metrics, names, colors):
     plt.grid()
     plt.legend()
     plt.show()
+
+    tests = ["f1", "recall", "precision", "nmae", "nse", "kge"]
+    testNames = ["F1", "Recall", "Precision", "NMAE", "NSE", "KGE"]
+    floodHubIndex = names.index("Flood Hub")
+    floodHubMetrics = calculated[floodHubIndex]
+
+    for i in range(len(calculated)):
+        if i == floodHubIndex:
+            continue
+
+        values = []
+        for j, test in enumerate(tests):
+            x = calculated[i][test]
+            y = floodHubMetrics[test]
+
+            # Sort Y to perform paired test with Wilcoxon
+            y = [y[floodHubMetrics["names"].index(name)] for name in calculated[i]["names"]]
+
+            pValue = wilcoxon(x, y, alternative="greater").pvalue
+            values.append(pValue)
+
+        print(f"{names[i]} P-Values:", f"{" | ".join([f'{testNames[j]}: {values[j]}' for j in range(testNames)])}")
 
 
 paths = ["", ""]
