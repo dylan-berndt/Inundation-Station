@@ -14,7 +14,7 @@ def calcMetrics(metricSet):
         "precision": np.zeros([len(metricSet), 4]),
         "f1": np.zeros([len(metricSet), 4]),
         "nodes": np.zeros([len(metricSet)]),
-        "nmae": np.zeros([len(metricSet)]),
+        "nrmse": np.zeros([len(metricSet)]),
         "nse": np.zeros([len(metricSet)]),
         "kge": np.zeros([len(metricSet)]),
         "names": np.empty([len(metricSet)], dtype=object),
@@ -40,7 +40,7 @@ def calcMetrics(metricSet):
                              0),  # model made no predictions = F1 of 0
                      np.nan)
 
-        calculated["nmae"][i] = np.mean(metricSet[name]["mae"])
+        calculated["nrmse"][i] = np.mean(metricSet[name]["rmse"])
 
         calculated["recall"][i] = recall
         calculated["precision"][i] = precision
@@ -69,18 +69,17 @@ def plotMetrics(metrics, names, colors):
         print(np.allclose(basis, comparison))
         print(np.max(np.abs(basis - comparison), axis=0))
 
-    plt.figure(figsize=(10, 6))
-
     labels = ["1 Year Return Period", "2 Year Return Period", "5 Year Return Period", "10 Year Return Period"]
 
     def plotMetric(m, name):
+        plt.figure(figsize=(14, 6))
         for i in range(4):
             plt.subplot(1, 4, i + 1)
             plt.title(labels[i])
             for j, metricSet in enumerate(calculated):
                 scores = metricSet[m][:, i].T
                 scores = scores[~np.isnan(scores)]
-                plot = plt.boxplot(scores, positions=[j], widths=0.5, label=names[j], patch_artist=True, showfliers=False)
+                plot = plt.boxplot(scores, positions=[j], widths=0.5, label=names[j], patch_artist=True, showfliers=True)
 
                 for patch in plot['boxes']:
                     patch.set_facecolor(colors[j])
@@ -93,7 +92,11 @@ def plotMetrics(metrics, names, colors):
             plt.grid()
             plt.xticks(np.arange(len(names)), names)
             plt.xlabel("Model")
-            plt.ylabel(name)
+
+            if i == 0:
+                plt.ylabel(name)
+
+            plt.tight_layout()
 
         plt.show()
 
@@ -126,6 +129,16 @@ def plotMetrics(metrics, names, colors):
 
     # plt.show()
 
+    bins = np.linspace(0, 0.02, 10)
+    ax = plt.gca()
+    ax.hist([calculated[i]["nrmse"] for i in range(len(calculated))], bins, label=names, color=colors)
+    ax.grid(True)
+    ax.set_axisbelow(True)
+    plt.legend(loc="upper right")
+    plt.ylabel("Basins")
+    plt.xlabel("Mean Absolute Error")
+    plt.show()
+
     plt.figure(figsize=(6, 3))
 
     for i, metricSet in enumerate(calculated):
@@ -152,8 +165,8 @@ def plotMetrics(metrics, names, colors):
     plt.legend()
     plt.show()
 
-    tests = ["f1", "nmae", "nse", "kge"]
-    testNames = ["1 Year Flood F1", "2 Year Flood F1", "5 Year Flood F1", "10 Year Flood F1", "NMAE", "NSE", "KGE"]
+    tests = ["f1", "nrmse", "nse", "kge"]
+    testNames = ["1 Year Flood F1", "2 Year Flood F1", "5 Year Flood F1", "10 Year Flood F1", "NRMSE", "NSE", "KGE"]
     floodHubIndex = names.index("Flood Hub")
     floodHubMetrics = calculated[floodHubIndex]
 
@@ -181,7 +194,7 @@ def plotMetrics(metrics, names, colors):
             else:
                 mask = np.logical_and(~np.isnan(x), ~np.isnan(y))
 
-                pValue = wilcoxon(x[mask], y[mask], alternative="greater" if test != "nmae" else "less").pvalue
+                pValue = wilcoxon(x[mask], y[mask], alternative="greater" if test != "nrmse" else "less").pvalue
                 samples.append(np.sum(mask))
                 values.append(pValue)
             
@@ -189,7 +202,7 @@ def plotMetrics(metrics, names, colors):
 
 
 paths = ["2026-01-06 20-50 ChebBlock5", "2026-01-11 15-24 GCNBlock", "2026-01-04 19-02 floodHub"]
-names = ["Combo GCNBlock5", "GCNBlock5", "Flood Hub"]
+names = ["ChebBlock5", "GCNBlock5", "Flood Hub"]
 colors = ["tab:blue", "tab:cyan", "tab:orange"]
 
 metrics = [json.load(open(os.path.join("checkpoints", paths[i], "metrics.json"))) for i in range(len(paths))]
