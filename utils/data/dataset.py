@@ -305,18 +305,22 @@ class InundationData(Dataset):
                 del self.grdcDict[node]
 
         upstreams = [len(self.upstreamBasins[node]) for node in self.upstreamBasins]
-        diameters = [nx.diameter(graph.subgraph(nx.ancestors(graph, node) | {node}).to_undirected())  for node in self.pfafDict.keys()]
+        diameters = [nx.diameter(graph.subgraph(nx.ancestors(graph, self.translateDict[node]) | {self.translateDict[node]}).to_undirected())  for node in self.grdcDict.keys()]
         print(f"Upstream Basins Compiled | {np.median(upstreams)} | {np.mean(upstreams)}")
 
         if display:
+            plt.figure(figsize=(6, 3))
             plt.hist(upstreams)
             plt.ylabel("Count")
             plt.xlabel("Number of Nodes")
+            plt.grid()
             plt.show()
 
+            plt.figure(figsize=(6, 3))
             plt.hist(diameters)
             plt.ylabel("Count")
             plt.xlabel("Graph Diameter")
+            plt.grid()
             plt.show()
 
         self.upstreamStructure = {
@@ -387,11 +391,14 @@ class InundationData(Dataset):
             self.graphSizes.extend([len(self.upstreamBasins[translateDict[key]])] * seriesLength)
 
         if display:
+            plt.figure(figsize=(6, 3))
             plt.hist(areaDiffs)
             plt.ylabel("Count")
             plt.xlabel("Area Error")
+            plt.grid()
             plt.show()
 
+            plt.figure(figsize=(6, 3))
             plt.scatter(basinAreas, areaDiffs)
             plt.xlabel("Actual Area")
             plt.ylabel("Area Error")
@@ -719,18 +726,21 @@ class GraphSizeSampler(Sampler):
             batchSizes = [batchSizes[i] for i in range(len(batchSizes)) if len(self.batches[i]) == batchSize]
             self.batches = [batch for batch in self.batches if len(batch) == batchSize]
 
-        plt.figure(figsize=(20, 6))
+        plt.figure(figsize=(10, 3))
         plt.subplot(1, 3, 1)
         plt.title("Node Count Distribution per Sample")
         plt.hist(sizes)
+        plt.grid()
 
         plt.subplot(1, 3, 2)
         plt.title("Node Count Distribution per Batch")
         plt.hist(batchSizes)
+        plt.grid()
 
         plt.subplot(1, 3, 3)
         plt.title("Data Samples Distribution per Batch")
         plt.hist([len(batch) for batch in self.batches])
+        plt.grid()
         plt.show()
 
     def __iter__(self):

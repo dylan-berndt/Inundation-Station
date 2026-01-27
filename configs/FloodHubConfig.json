@@ -1,6 +1,6 @@
 {
     "path": "data",
-    "batchSize": 64,
+    "batchSize": 256,
     "nodesPerBatch": 1000,
     "dataSplit": 0.8,
     "history": 60,
@@ -12,48 +12,48 @@
         "basinProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 256
         },
         "riverProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 256
         },
         "lstm": {
-            "input_size": 128,
-            "hidden_size": 128,
+            "input_size": 256,
+            "hidden_size": 256,
             "num_layers": 2
         },
         "head": {
-            "inputDim": 128,
-            "hiddenDim": 256,
-            "mixtures": 12
+            "inputDim": 256,
+            "hiddenDim": 512,
+            "mixtures": 1
         }
     },
     "bridge": {
-        "in_features": 128,
-        "out_features": 128
+        "in_features": 256,
+        "out_features": 256
     },
     "decoder": {
         "basinProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 256
         },
         "riverProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 256
         },
         "lstm": {
-            "input_size": 128,
-            "hidden_size": 128,
+            "input_size": 256,
+            "hidden_size": 256,
             "num_layers": 2
         },
         "head": {
-            "inputDim": 128,
-            "hiddenDim": 256,
-            "mixtures": 12
+            "inputDim": 256,
+            "hiddenDim": 512,
+            "mixtures": 1
         }
     },
     "variables": {

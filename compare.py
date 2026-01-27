@@ -72,14 +72,14 @@ def plotMetrics(metrics, names, colors):
     labels = ["1 Year Return Period", "2 Year Return Period", "5 Year Return Period", "10 Year Return Period"]
 
     def plotMetric(m, name):
-        plt.figure(figsize=(14, 6))
+        plt.figure(figsize=(8, 4))
         for i in range(4):
             plt.subplot(1, 4, i + 1)
             plt.title(labels[i])
             for j, metricSet in enumerate(calculated):
                 scores = metricSet[m][:, i].T
                 scores = scores[~np.isnan(scores)]
-                plot = plt.boxplot(scores, positions=[j], widths=0.5, label=names[j], patch_artist=True, showfliers=True)
+                plot = plt.boxplot(scores, positions=[j], widths=0.5, label=names[j], patch_artist=True, showfliers=False)
 
                 for patch in plot['boxes']:
                     patch.set_facecolor(colors[j])
@@ -129,14 +129,16 @@ def plotMetrics(metrics, names, colors):
 
     # plt.show()
 
-    bins = np.linspace(0, 0.02, 10)
+    plt.figure(figsize=(6, 3))
+    bins = np.linspace(0, 0.02, 6)
     ax = plt.gca()
     ax.hist([calculated[i]["nrmse"] for i in range(len(calculated))], bins, label=names, color=colors)
     ax.grid(True)
     ax.set_axisbelow(True)
     plt.legend(loc="upper right")
     plt.ylabel("Basins")
-    plt.xlabel("Mean Absolute Error")
+    plt.xlabel("Root Mean Squared Error")
+    plt.xticks(bins)
     plt.show()
 
     plt.figure(figsize=(6, 3))
@@ -188,22 +190,22 @@ def plotMetrics(metrics, names, colors):
                     xSample = x[:, k]
                     ySample = y[:, k]
                     mask = np.logical_and(~np.isnan(xSample), ~np.isnan(ySample))
-                    pValue = wilcoxon(xSample[mask], ySample[mask], alternative="greater").pvalue
+                    pValue = wilcoxon(xSample, ySample, alternative="greater", nan_policy='omit').pvalue
                     samples.append(np.sum(mask))
                     values.append(pValue)
             else:
                 mask = np.logical_and(~np.isnan(x), ~np.isnan(y))
 
-                pValue = wilcoxon(x[mask], y[mask], alternative="greater" if test != "nrmse" else "less").pvalue
+                pValue = wilcoxon(x, y, alternative="greater" if test != "nrmse" else "less", nan_policy='omit').pvalue
                 samples.append(np.sum(mask))
                 values.append(pValue)
             
-        print(f"{names[i]} P-Values:\n\t{"\n\t".join([f'{testNames[j]} (N={samples[j]}): {values[j]:.3f}' for j in range(len(testNames))])}")
+        print(f"{names[i]} P-Values:\n\t{"\n\t".join([f'{testNames[j]} (N={samples[j]}): {values[j]}' for j in range(len(testNames))])}")
 
 
-paths = ["2026-01-06 20-50 ChebBlock5", "2026-01-11 15-24 GCNBlock", "2026-01-04 19-02 floodHub"]
-names = ["ChebBlock5", "GCNBlock5", "Flood Hub"]
-colors = ["tab:blue", "tab:cyan", "tab:orange"]
+paths = ["2026-01-24 05-33 Combo ChebBlock5", "2026-01-25 06-45 FloodHub"]
+names = ["STGNN", "Flood Hub"]
+colors = ["tab:blue", "tab:orange"]
 
 metrics = [json.load(open(os.path.join("checkpoints", paths[i], "metrics.json"))) for i in range(len(paths))]
 

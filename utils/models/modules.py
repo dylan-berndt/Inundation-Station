@@ -198,6 +198,8 @@ class CMAL(nn.Module):
 
             u = torch.rand_like(mChosen).clamp(1e-6, 1 - 1e-6).to(mu.device)
 
+            tChosen = torch.clamp(tChosen, 1e-6, 1.0 - 1e-6)
+
             samples[:, t] = (mChosen + bChosen * (
                 torch.where(
                     u < tChosen,

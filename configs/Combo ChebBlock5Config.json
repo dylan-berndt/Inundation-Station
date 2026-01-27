@@ -1,7 +1,7 @@
 {
     "path": "data",
     "batchSize": 8,
-    "nodesPerBatch": 4000,
+    "nodesPerBatch": 8000,
     "dataSplit": 0.8,
     "history": 60,
     "future": 7,
@@ -9,27 +9,27 @@
     "excludeDiffBasins": true,
     "appendDimensionPath": "gnnEncoder.block.gnnLSTM.outChannels",
     "gnnEncoder": {
-        "embedDim": 128,
+        "embedDim": 256,
         "basinProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 256
         },
         "riverProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 256
         },
         "block": {
             "gnnLSTM": {
                 "gnnType": "Cheb",
                 "gnn": {
-                    "in_channels": 128,
-                    "out_channels": 128,
+                    "in_channels": 256,
+                    "out_channels": 256,
                     "K": 5
                 },
-                "inChannels": 128,
-                "outChannels": 128,
+                "inChannels": 256,
+                "outChannels": 256,
                 "dropout": 0.2
             }
         },
@@ -39,45 +39,45 @@
         "basinProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 256
         },
         "riverProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 256
         },
         "lstm": {
-            "input_size": 128,
-            "hidden_size": 128,
+            "input_size": 256,
+            "hidden_size": 256,
             "num_layers": 2
         }
     },
     "bridge": {
-        "in_features": 128,
-        "out_features": 128
+        "in_features": 256,
+        "out_features": 256
     },
     "gnnDecoder": {
-        "embedDim": 128,
+        "embedDim": 256,
         "basinProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 256
         },
         "riverProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 256
         },
         "block": {
             "gnnLSTM": {
                 "gnnType": "Cheb",
                 "gnn": {
-                    "in_channels": 128,
-                    "out_channels": 128,
+                    "in_channels": 256,
+                    "out_channels": 256,
                     "K": 5
                 },
-                "inChannels": 128,
-                "outChannels": 128,
+                "inChannels": 256,
+                "outChannels": 256,
                 "dropout": 0.2
             }
         },
@@ -87,23 +87,23 @@
         "basinProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 256
         },
         "riverProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
-            "outputDim": 128
+            "outputDim": 256
         },
         "lstm": {
-            "input_size": 128,
-            "hidden_size": 128,
+            "input_size": 256,
+            "hidden_size": 256,
             "num_layers": 2
         }
     },
     "head": {
-        "inputDim": 256,
-        "hiddenDim": 512,
-        "mixtures": 12
+        "inputDim": 512,
+        "hiddenDim": 1024,
+        "mixtures": 1
     },
     "variables": {
         "river": {
