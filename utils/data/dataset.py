@@ -657,7 +657,7 @@ class InundationData(Dataset):
         plt.show()
 
     @staticmethod
-    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234):
+    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=4):
         torch.manual_seed(seed)
         random.seed(seed)
         np.random.seed(seed)
@@ -675,8 +675,8 @@ class InundationData(Dataset):
         trainSampler = GraphSizeSampler(train, nodesPerBatch=dataset.config.nodesPerBatch, force=False, shuffle=shuffle)
         testSampler = GraphSizeSampler(test, nodesPerBatch=dataset.config.nodesPerBatch, force=False, shuffle=shuffle)
 
-        train = DataLoader(train, batch_sampler=trainSampler, num_workers=4)
-        test = DataLoader(test, batch_sampler=testSampler, num_workers=4)
+        train = DataLoader(train, batch_sampler=trainSampler, num_workers=numWorkers)
+        test = DataLoader(test, batch_sampler=testSampler, num_workers=numWorkers)
 
         return train, test
 
@@ -817,7 +817,8 @@ class FloodHubData(InundationData):
     def display(self, sample=None):
         pass
 
-    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234):
+    @staticmethod
+    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=4):
         torch.manual_seed(seed)
         random.seed(seed)
         np.random.seed(seed)
@@ -831,8 +832,8 @@ class FloodHubData(InundationData):
         train = torch.utils.data.Subset(dataset, trainIndex)
         test = torch.utils.data.Subset(dataset, testIndex)
 
-        train = DataLoader(train, batch_size=dataset.config.batchSize, shuffle=shuffle, num_workers=4)
-        test = DataLoader(test, batch_size=dataset.config.batchSize, shuffle=shuffle, num_workers=4)
+        train = DataLoader(train, batch_size=dataset.config.batchSize, shuffle=shuffle, num_workers=numWorkers)
+        test = DataLoader(test, batch_size=dataset.config.batchSize, shuffle=shuffle, num_workers=numWorkers)
 
         return train, test
 

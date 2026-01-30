@@ -31,14 +31,15 @@ def calcMetrics(metricSet):
         totalPositives = tp + fn
         calculated["totalPositives"][i] = totalPositives
 
-        recall = tp / (tp + fn)
-        precision = tp / (tp + fp)
+        recall = tp / (tp + fn + 1e-8)
+        precision = tp / (tp + fp + 1e-8)
 
-        f1 = np.where(totalPositives > 0,  # If there are ground truth positives
-                     np.where((tp + fp) > 0,  # and model made predictions
-                             2 * precision * recall / (precision + recall),
-                             0),  # model made no predictions = F1 of 0
-                     np.nan)
+        # f1 = np.where(totalPositives > 0,  # If there are ground truth positives
+        #              np.where((tp + fp) > 0,  # and model made predictions
+        #                      2 * precision * recall / (precision + recall + 1e-8),
+        #                      0),  # model made no predictions = F1 of 0
+        #              np.nan)
+        f1 = 2 * precision * recall / (precision + recall + 1e-8)
 
         calculated["nrmse"][i] = np.mean(metricSet[name]["rmse"])
 
@@ -68,6 +69,14 @@ def plotMetrics(metrics, names, colors):
         comparison = np.array([calculated[i]["totalPositives"][calculated[i]["names"].tolist().index(name)] for name in calculated[0]["names"]])
         print(np.allclose(basis, comparison))
         print(np.max(np.abs(basis - comparison), axis=0))
+
+        # for i in range(4):
+        #     mismatch = np.abs(basis - comparison)[:, i]
+        #     plt.hist(mismatch[mismatch > 0])
+        #     plt.show()
+
+    print(np.nanmean(calculated[0]["f1"], axis=0))
+    print(np.nanmean(calculated[1]["f1"], axis=0))
 
     labels = ["1 Year Return Period", "2 Year Return Period", "5 Year Return Period", "10 Year Return Period"]
 
@@ -203,7 +212,7 @@ def plotMetrics(metrics, names, colors):
         print(f"{names[i]} P-Values:\n\t{"\n\t".join([f'{testNames[j]} (N={samples[j]}): {values[j]}' for j in range(len(testNames))])}")
 
 
-paths = ["2026-01-24 05-33 Combo ChebBlock5", "2026-01-25 06-45 FloodHub"]
+paths = ["2026-01-28 23-16 Combo ChebBlock5", "2026-01-26 00-53 FloodHub"]
 names = ["STGNN", "Flood Hub"]
 colors = ["tab:blue", "tab:orange"]
 
