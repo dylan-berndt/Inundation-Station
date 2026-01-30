@@ -70,10 +70,10 @@ def plotMetrics(metrics, names, colors):
         print(np.allclose(basis, comparison))
         print(np.max(np.abs(basis - comparison), axis=0))
 
-        # for i in range(4):
-        #     mismatch = np.abs(basis - comparison)[:, i]
-        #     plt.hist(mismatch[mismatch > 0])
-        #     plt.show()
+        for i in range(4):
+            mismatch = np.abs(basis - comparison)[:, i]
+            plt.hist(mismatch[mismatch > 0])
+            plt.show()
 
     print(np.nanmean(calculated[0]["f1"], axis=0))
     print(np.nanmean(calculated[1]["f1"], axis=0))
@@ -212,6 +212,7 @@ def plotMetrics(metrics, names, colors):
         print(f"{names[i]} P-Values:\n\t{"\n\t".join([f'{testNames[j]} (N={samples[j]}): {values[j]}' for j in range(len(testNames))])}")
 
 
+# paths = ["2026-01-24 05-33 Combo ChebBlock5", "2026-01-25 06-45 FloodHub"]
 paths = ["2026-01-28 23-16 Combo ChebBlock5", "2026-01-26 00-53 FloodHub"]
 names = ["STGNN", "Flood Hub"]
 colors = ["tab:blue", "tab:orange"]

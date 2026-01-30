@@ -718,6 +718,9 @@ class GraphSizeSampler(Sampler):
             batch.append(indices[i])
             batchSum += sizes[i]
 
+        self.batches.append(batch)
+        batchSizes.append(batchSum)
+
         # For diagnosing memory leaks
         if force:
             self.batches = [self.batches[i] for i in range(len(self.batches)) if batchSizes[i] == nodesPerBatch]
