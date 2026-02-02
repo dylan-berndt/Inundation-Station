@@ -70,30 +70,8 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 6. Run vis.py
-You can choose to either run this script or disable the visualizer in the training notebook. 
-
-Running the script creates a visualizer for model metrics such as loss, recall, and NSE. This could technically be run on another device if client is updated in the training notebook to connect to the machine.
-
-### 7. Run train.ipynb
+### 6. Run train.ipynb
 Begins training. Make sure to specify the chosen config, model, and dataset. First run will take some extra time precomputing joins on ERA5, GRDC, and BasinATLAS data.
-
-## Model
-
-![Inundation Station-Page-2 drawio(2)](https://github.com/user-attachments/assets/290145ab-cd8d-4d62-9c60-a0c83a23795e)
-
-## Preliminary Results
-
-![NSE Curves](https://github.com/dylan-berndt/Inundation-Station/blob/91674b2b5cad0cc01cdddbbe18c8c3a0eae408d0/results/NSE%20Curves.png)
-
-### F1 Scores by Forecast Horizon and Event Likelihood
-![F1 Scores](https://github.com/dylan-berndt/Inundation-Station/blob/818c85077007a68cc3de43405923da31bb917d94/results/F1%20Scores.png)
-
-### Precision Scores by Forecast Horizon and Event Likelihood
-![Precision Scores](https://github.com/dylan-berndt/Inundation-Station/blob/818c85077007a68cc3de43405923da31bb917d94/results/Precision%20Scores.png)
-
-### Recall Scores by Forecast Horizon and Event Likelihood
-![Recall Scores](https://github.com/dylan-berndt/Inundation-Station/blob/818c85077007a68cc3de43405923da31bb917d94/results/Recall%20Scores.png)
 
 
 
