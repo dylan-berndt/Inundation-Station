@@ -1,14 +1,15 @@
 {
     "path": "data",
-    "batchSize": 256,
-    "nodesPerBatch": 1000,
+    "batchSize": 8,
+    "nodesPerBatch": 10000,
     "dataSplit": 0.8,
-    "history": 60,
+    "history": 365,
     "future": 7,
     "seed": 1234,
     "excludeDiffBasins": true,
-    "appendDimensionPath": "encoder.lstm.hidden_size",
+    "appendDimensionPath": "gnnEncoder.block.gnnLSTM.outChannels",
     "encoder": {
+        "embedDim": 256,
         "basinProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
@@ -22,13 +23,21 @@
         "lstm": {
             "input_size": 256,
             "hidden_size": 256,
-            "num_layers": 2,
+            "num_layers": 1,
             "batch_first": true
         },
-        "head": {
-            "inputDim": 256,
-            "hiddenDim": 512,
-            "mixtures": 1
+        "stack": {
+            "layer": {
+                "conv": {
+                    "in_channels": 256,
+                    "out_channels": 256
+                },
+                "pooling": {
+                    "in_channels": 256,
+                    "ratio": 0.5
+                }
+            },
+            "layers": 5
         }
     },
     "bridge": {
@@ -36,6 +45,7 @@
         "out_features": 256
     },
     "decoder": {
+        "embedDim": 256,
         "basinProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
@@ -49,14 +59,27 @@
         "lstm": {
             "input_size": 256,
             "hidden_size": 256,
-            "num_layers": 2,
+            "num_layers": 1,
             "batch_first": true
         },
-        "head": {
-            "inputDim": 256,
-            "hiddenDim": 512,
-            "mixtures": 1
+        "stack": {
+            "layer": {
+                "conv": {
+                    "in_channels": 256,
+                    "out_channels": 256
+                },
+                "pooling": {
+                    "in_channels": 256,
+                    "ratio": 0.5
+                }
+            },
+            "layers": 5
         }
+    },
+    "head": {
+        "inputDim": 256,
+        "hiddenDim": 512,
+        "mixtures": 1
     },
     "variables": {
         "river": {
@@ -652,7 +675,7 @@
         ],
         "surface_net_thermal_radiation_sum": [
             -2839124.0034197937,
-            3643240.1610396034
+            3646440.1610396034
         ],
         "surface_pressure": [
             98868.1277767776,

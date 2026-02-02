@@ -77,10 +77,11 @@ class ComboGNNCoder(nn.Module):
         for b, block in enumerate(self.blocks):
             positional, newState = block(positional, inputs.edge_index, state)
 
-        batchIndices = torch.concatenate([torch.tensor([0]).to(projected.device), torch.cumsum(inputs.nodes.to(projected.device), dim=0)[:-1]], dim=0)
-        sampledBasin = projected[batchIndices, :, :]
-
-        # sampledBasin = scatter(projected, inputs.batch, dim=0, reduce='max')
+        if self.config.reduction == "sample":
+            batchIndices = torch.concatenate([torch.tensor([0]).to(projected.device), torch.cumsum(inputs.nodes.to(projected.device), dim=0)[:-1]], dim=0)
+            sampledBasin = projected[batchIndices, :, :]
+        else:
+            sampledBasin = scatter(projected, inputs.batch, dim=0, reduce=self.config.reduction)
 
         riverContinuous = inputs.riverContinuous.unsqueeze(1).expand(-1, inputShape[1], -1)
         riverDiscrete = inputs.riverDiscrete.unsqueeze(1).expand(-1, inputShape[1], -1)

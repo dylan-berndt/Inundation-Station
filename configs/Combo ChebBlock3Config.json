@@ -1,14 +1,42 @@
 {
     "path": "data",
-    "batchSize": 256,
-    "nodesPerBatch": 1000,
+    "batchSize": 8,
+    "nodesPerBatch": 10000,
     "dataSplit": 0.8,
     "history": 60,
     "future": 7,
     "seed": 1234,
     "excludeDiffBasins": true,
-    "appendDimensionPath": "encoder.lstm.hidden_size",
-    "encoder": {
+    "appendDimensionPath": "gnnEncoder.block.gnnLSTM.outChannels",
+    "gnnEncoder": {
+        "embedDim": 256,
+        "reduction": "mean",
+        "basinProjection": {
+            "discreteDim": 12,
+            "dropout": 0.2,
+            "outputDim": 256
+        },
+        "riverProjection": {
+            "discreteDim": 12,
+            "dropout": 0.2,
+            "outputDim": 256
+        },
+        "block": {
+            "gnnLSTM": {
+                "gnnType": "Cheb",
+                "gnn": {
+                    "in_channels": 256,
+                    "out_channels": 256,
+                    "K": 3
+                },
+                "inChannels": 256,
+                "outChannels": 256,
+                "dropout": 0.2
+            }
+        },
+        "blocks": 2
+    },
+    "floodEncoder": {
         "basinProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
@@ -22,20 +50,42 @@
         "lstm": {
             "input_size": 256,
             "hidden_size": 256,
-            "num_layers": 2,
-            "batch_first": true
-        },
-        "head": {
-            "inputDim": 256,
-            "hiddenDim": 512,
-            "mixtures": 1
+            "num_layers": 2
         }
     },
     "bridge": {
         "in_features": 256,
         "out_features": 256
     },
-    "decoder": {
+    "gnnDecoder": {
+        "embedDim": 256,
+        "reduction": "mean",
+        "basinProjection": {
+            "discreteDim": 12,
+            "dropout": 0.2,
+            "outputDim": 256
+        },
+        "riverProjection": {
+            "discreteDim": 12,
+            "dropout": 0.2,
+            "outputDim": 256
+        },
+        "block": {
+            "gnnLSTM": {
+                "gnnType": "Cheb",
+                "gnn": {
+                    "in_channels": 256,
+                    "out_channels": 256,
+                    "K": 3
+                },
+                "inChannels": 256,
+                "outChannels": 256,
+                "dropout": 0.2
+            }
+        },
+        "blocks": 2
+    },
+    "floodDecoder": {
         "basinProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
@@ -49,14 +99,13 @@
         "lstm": {
             "input_size": 256,
             "hidden_size": 256,
-            "num_layers": 2,
-            "batch_first": true
-        },
-        "head": {
-            "inputDim": 256,
-            "hiddenDim": 512,
-            "mixtures": 1
+            "num_layers": 2
         }
+    },
+    "head": {
+        "inputDim": 512,
+        "hiddenDim": 1024,
+        "mixtures": 1
     },
     "variables": {
         "river": {
@@ -652,7 +701,7 @@
         ],
         "surface_net_thermal_radiation_sum": [
             -2839124.0034197937,
-            3643240.1610396034
+            3646440.1610396034
         ],
         "surface_pressure": [
             98868.1277767776,
