@@ -6,3 +6,4 @@ from .block import *
 from .gclstm import *
 from .combo import *
 from .simple import *
+from .hierarchical import *
