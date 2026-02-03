@@ -8,73 +8,23 @@
     "seed": 1234,
     "excludeDiffBasins": true,
     "appendDimensionPath": "gnnEncoder.block.gnnLSTM.outChannels",
-    "encoder": {
-        "embedDim": 256,
+    "gclstm": {
         "basinProjection": {
             "discreteDim": 12,
             "dropout": 0.2,
             "outputDim": 256
         },
-        "riverProjection": {
-            "discreteDim": 12,
-            "dropout": 0.2,
-            "outputDim": 256
-        },
         "lstm": {
-            "input_size": 256,
-            "hidden_size": 256,
-            "num_layers": 1,
-            "batch_first": true
+            "in_channels": 256,
+            "out_channels": 256,
+            "K": 5
         },
-        "stack": {
-            "layer": {
-                "conv": {
-                    "in_channels": 256,
-                    "out_channels": 256
-                },
-                "pooling": {
-                    "in_channels": 256,
-                    "ratio": 0.5
-                }
-            },
-            "layers": 5
-        }
+        "poolLayers": [1, 2],
+        "layers": 2
     },
     "bridge": {
         "in_features": 256,
         "out_features": 256
-    },
-    "decoder": {
-        "embedDim": 256,
-        "basinProjection": {
-            "discreteDim": 12,
-            "dropout": 0.2,
-            "outputDim": 256
-        },
-        "riverProjection": {
-            "discreteDim": 12,
-            "dropout": 0.2,
-            "outputDim": 256
-        },
-        "lstm": {
-            "input_size": 256,
-            "hidden_size": 256,
-            "num_layers": 1,
-            "batch_first": true
-        },
-        "stack": {
-            "layer": {
-                "conv": {
-                    "in_channels": 256,
-                    "out_channels": 256
-                },
-                "pooling": {
-                    "in_channels": 256,
-                    "ratio": 0.5
-                }
-            },
-            "layers": 5
-        }
     },
     "head": {
         "inputDim": 256,

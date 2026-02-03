@@ -561,6 +561,8 @@ class InundationData(Dataset):
             edge_index=structure,
             hopDistance=hops,
 
+            basins=upstreamBasins,
+
             riverContinuous=riverContinuous,
             riverDiscrete=riverDiscrete,
 
@@ -577,6 +579,8 @@ class InundationData(Dataset):
             basinDiscrete=basinDiscrete,
             edge_index=structure,
             hopDistance=hops,
+
+            basins=upstreamBasins,
 
             riverContinuous=riverContinuous,
             riverDiscrete=riverDiscrete,
