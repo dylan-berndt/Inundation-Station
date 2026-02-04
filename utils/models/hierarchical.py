@@ -11,6 +11,12 @@ from torch_geometric.utils import scatter
 
 
 def getPoolingMatrix(codes, batch):
+    if type(codes[0]) == list:
+        allCodes = []
+        for codeSet in codes:
+            allCodes.extend(list(codeSet))
+        codes = allCodes
+
     codes = np.array(codes)
     target = len(codes[0]) - 1
 
@@ -18,8 +24,10 @@ def getPoolingMatrix(codes, batch):
     batches = []
     allParents = []
 
+    batchCopy = batch.clone().cpu()
+
     for b in range(batch.max().item() + 1):
-        graphCodes = codes[batch == b]
+        graphCodes = codes[batchCopy == b]
         graphParents = [code[:target] for code in graphCodes]
 
         uniqueParents = sorted(set(graphParents))
@@ -57,7 +65,7 @@ def poolEdgeIndex(edges, pool):
     return edgesPooled
 
 
-class BasinHierarchicalGCLSTM(nn.Module):
+class HierarchicalBasinGCLSTM(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -65,6 +73,12 @@ class BasinHierarchicalGCLSTM(nn.Module):
         self.positional = LearnedPositionalEncoding(config.lstm.in_channels)
         self.basinProjection = DualProjection(config.basinProjection)
         self.lstms = nn.ModuleList([tgnn.recurrent.GCLSTM(**config.lstm) for _ in range(config.layers)])
+
+        self.hiddenBridge = nn.ModuleList([nn.Sequential(
+            nn.Linear(config.lstm.in_channels, config.lstm.in_channels),
+            nn.Tanh()
+        ) for _ in range(config.layers)])
+        self.cellBridge = nn.ModuleList([nn.Linear(config.lstm.in_channels, config.lstm.in_channels) for _ in range(config.layers)])
 
         self.poolLayers = [layer - 1 for layer in config.poolLayers]
 
@@ -94,18 +108,23 @@ class BasinHierarchicalGCLSTM(nn.Module):
                 hidden, cell = self.lstms[layer](x[:, t], edges, None, hidden, cell)
                 outputs.append(hidden)
 
-            passHidden.append(hidden)
-            passCell.append(cell)
+            passHidden.append(self.hiddenBridge[layer](hidden))
+            passCell.append(self.cellBridge[layer](cell))
 
             outputs = torch.stack(outputs, dim=1)
             x = outputs
 
             if layer in self.poolLayers:
-                pool, basins, batch = getPoolingMatrix(basins)
+                pool, basins, batch = getPoolingMatrix(basins, batch)
                 pool = pool.to(x.device)
                 batch = batch.to(x.device)
 
-                x = pool @ x
+                pooled = []
+                for t in range(x.shape[1]):
+                    pooled.append(pool @ x[:, t])
+                x = torch.stack(pooled, dim=1)
+
+                # x = pool @ x
                 edges = poolEdgeIndex(edges, pool)
 
         outputs = []
@@ -113,31 +132,23 @@ class BasinHierarchicalGCLSTM(nn.Module):
             outputs.append(gnn.global_mean_pool(x[:, t], batch))
         x = torch.stack(outputs, dim=1)
 
-        return x, (torch.stack(passHidden, dim=0), torch.stack(passCell, dim=0))
+        return x, (passHidden, passCell)
 
 
-class BasinHierarchicalStation(nn.Module):
+class HierarchicalBasinStation(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
 
-        self.encoder = BasinHierarchicalGCLSTM(config.gclstm)
+        self.encoder = HierarchicalBasinGCLSTM(config.gclstm)
 
-        self.hiddenBridge = nn.Sequential(
-            nn.Linear(**config.bridge),
-            nn.Tanh()
-        )
-        self.cellBridge = nn.Linear(**config.bridge)
-
-        self.decoder = BasinHierarchicalGCLSTM(config.gclstm)
+        self.decoder = HierarchicalBasinGCLSTM(config.gclstm)
 
         self.head = CMAL(**config.head)
 
     def forward(self, inputs):
         past, future = inputs
         hindcast, (hidden, cell) = self.encoder(past)
-        hidden = self.hiddenBridge(hidden)
-        cell = self.cellBridge(cell)
         forecast, _ = self.decoder(future, (hidden, cell))
 
         return self.head(hindcast), self.head(forecast)
