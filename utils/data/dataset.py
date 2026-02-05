@@ -687,13 +687,15 @@ class InundationData(Dataset):
 
 
 class GraphSizeSampler(Sampler):
-    def __init__(self, dataset, nodesPerBatch=500, dropLast=False, force=False, shuffle=True):
+    def __init__(self, dataset, nodesPerBatch=500, dropLast=False, force=False, shuffle=True, startPoint=0):
         self.dataset = dataset
         self.nodesPerBatch = 500
         self.dropLast = dropLast
         self.shuffle = shuffle
 
         self.batches = []
+
+        self.start = startPoint
 
         if hasattr(dataset, "graphSizes"):
             indices = range(len(dataset))
@@ -753,7 +755,8 @@ class GraphSizeSampler(Sampler):
     def __iter__(self):
         if self.shuffle:
             random.shuffle(self.batches)
-        for batch in self.batches:
+        batchList = self.batches[self.start:] + self.batches[:self.start]
+        for batch in batchList:
             yield batch
 
     def __len__(self):

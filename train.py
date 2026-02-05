@@ -82,7 +82,7 @@ def itertoolsBetter(dataIter):
             yield batch
 
 
-def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict[str: nn.Module], resume=None, deltas={}, name=""):
+def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict[str: nn.Module], resume=None, deltas={}, name="", runID=None, startPoint=14000):
     model = None
     optimizer = None
     train, test = None, None
@@ -183,9 +183,10 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
                     gc.collect()
 
                 if run is None:
-                    run = wandb.init(entity="dylanberndt123-missouri-state-university", project="Inundation-Station", config=config.serialize())
+                    run = wandb.init(entity="dylanberndt123-missouri-state-university", project="Inundation-Station", config=config.serialize(),
+                                     id=runID, resume="must")
 
-                run.log(metrics)
+                run.log(metrics, step=startPoint + progress + 1)
 
                 progress += 1
 
@@ -254,7 +255,8 @@ for m in range(len(models)):
     config = Config().load(os.path.join("configs", configs[m]))
 
     name = configs[m].removesuffix("Config.json")
-    model, (train, test), prof = trainModel(config, chosenModel, chosenDataset, CMALLoss(), epochs=10, criterion=metrics, resume=None, deltas=deltas, name=name)
+    model, (train, test), prof = trainModel(config, chosenModel, chosenDataset, CMALLoss(), epochs=10, criterion=metrics, 
+                                            resume=os.path.join("checkpoints", "2026-02-03 16-22 HierarchicalBasin"), deltas=deltas, name=name, runID="0vyffhsn")
     del chosenModel, chosenDataset, model, train, test
     gc.collect()
     torch.cuda.empty_cache()
