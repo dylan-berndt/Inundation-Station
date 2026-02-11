@@ -626,7 +626,7 @@ class InundationData(Dataset):
 
         print(data)
 
-    def display(self, sample=None, grdcID=None):
+    def display(self, sample=None, grdcID=None, addEdges=True):
         # THEBES: 4127501
         if grdcID is None:
             sample = self[0] if sample is None else sample
@@ -658,6 +658,25 @@ class InundationData(Dataset):
         basins.plot(ax=ax, color='white', edgecolor='green')
         rivers.plot(ax=ax, color='white', edgecolor='blue')
         locations.plot(ax=ax, marker='o', color='red', markersize=5)
+
+        if addEdges:
+            centroids = {}
+            for basinID in basinIDs:
+                geom = basins.loc[basinID, 'geometry']
+                centroid = geom.centroid
+                centroids[basinID] = (centroid.x, centroid.y)
+
+            basinIDs = [self.upstreamBasins[self.translateDict[grdcID]] for grdcID in grdcIDs]
+            basinIDs = set().union(*basinIDs)
+            for pfafID in basinIDs:
+                graph = self.upstreamStructure[pfafID]
+                for edge in graph.edges():
+                    source, target = edge
+                    if source in centroids and target in centroids:
+                        x = [centroids[source][0], centroids[target][0]]
+                        y = [centroids[source][1], centroids[target][1]]
+                        ax.plot(x, y, 'k-', alpha=0.5, linewidth=1)
+
         plt.show()
 
     @staticmethod
