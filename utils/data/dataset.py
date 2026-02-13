@@ -268,10 +268,9 @@ class InundationData(Dataset):
             upstream = row
             graph.add_edge(str(upstream["PFAF_ID"]), str(upstream["PFAF_ID"]))
 
-            if pd.isna(upstream["NEXT_DOWN"]) or upstream["NEXT_DOWN"] == 0:
+            if pd.isna(upstream["NEXT_DOWN"]) or upstream["NEXT_DOWN"] == 0 or upstream["ENDO"] == 2:
                 continue
 
-            # TODO: Fix, HYBAS_ID is not the same
             downstreamBasins = self.basinATLAS[self.basinATLAS["HYBAS_ID"] == upstream["NEXT_DOWN"]]
             for _, downstream in downstreamBasins.iterrows():
                 if str(upstream["PFAF_ID"]) == str(downstream["PFAF_ID"]):
@@ -325,6 +324,9 @@ class InundationData(Dataset):
 
         self.upstreamStructure = {
             node: list(graph.subgraph(self.upstreamBasins[node]).edges) for node in self.pfafDict.keys()
+        }
+        self.graphs = {
+            node: graph.subgraph(self.upstreamBasins[node]) for node in self.pfafDict.keys()
         }
         print("Upstream Structures Compiled")
 
@@ -654,7 +656,7 @@ class InundationData(Dataset):
         allBasins = allBasins.to_crs("EPSG:4326")
 
         fig, ax = plt.subplots(figsize=(20, 6))
-        allBasins.plot(ax=ax, color="white", edgecolor="black")
+        # allBasins.plot(ax=ax, color="white", edgecolor="black")
         basins.plot(ax=ax, color='white', edgecolor='green')
         rivers.plot(ax=ax, color='white', edgecolor='blue')
         locations.plot(ax=ax, marker='o', color='red', markersize=5)
@@ -669,13 +671,12 @@ class InundationData(Dataset):
             basinIDs = [self.upstreamBasins[self.translateDict[grdcID]] for grdcID in grdcIDs]
             basinIDs = set().union(*basinIDs)
             for pfafID in basinIDs:
-                graph = self.upstreamStructure[pfafID]
+                graph = self.graphs[pfafID]
                 for edge in graph.edges():
                     source, target = edge
-                    if source in centroids and target in centroids:
-                        x = [centroids[source][0], centroids[target][0]]
-                        y = [centroids[source][1], centroids[target][1]]
-                        ax.plot(x, y, 'k-', alpha=0.5, linewidth=1)
+                    x = [centroids[int(source)][0], centroids[int(target)][0]]
+                    y = [centroids[int(source)][1], centroids[int(target)][1]]
+                    ax.plot(x, y, 'k-', alpha=0.5, linewidth=1, color="red")
 
         plt.show()
 

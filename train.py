@@ -82,7 +82,7 @@ def itertoolsBetter(dataIter):
             yield batch
 
 
-def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict[str: nn.Module], resume=None, deltas={}, name="", runID=None, startPoint=14000):
+def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict[str: nn.Module], resume=None, deltas={}, name="", runID=None, startPoint=0):
     model = None
     optimizer = None
     train, test = None, None
@@ -184,7 +184,7 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
 
                 if run is None:
                     run = wandb.init(entity="dylanberndt123-missouri-state-university", project="Inundation-Station", config=config.serialize(),
-                                     id=runID, resume="must")
+                                     id=runID, resume=("must" if resume is not None else "never"))
 
                 run.log(metrics, step=startPoint + progress + 1)
 
@@ -216,7 +216,6 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
         return model, (train, test), prof
 
     except KeyboardInterrupt:
-        print("\n\n\n", e, "\n\n\n")
         wandb.finish()
         if model is not None:
             now = datetime.strftime(start, "%Y-%m-%d %H-%M")
@@ -256,7 +255,7 @@ for m in range(len(models)):
 
     name = configs[m].removesuffix("Config.json")
     model, (train, test), prof = trainModel(config, chosenModel, chosenDataset, CMALLoss(), epochs=10, criterion=metrics, 
-                                            resume=os.path.join("checkpoints", "2026-02-03 16-22 HierarchicalBasin"), deltas=deltas, name=name, runID="0vyffhsn")
+                                            deltas=deltas, name=name)
     del chosenModel, chosenDataset, model, train, test
     gc.collect()
     torch.cuda.empty_cache()

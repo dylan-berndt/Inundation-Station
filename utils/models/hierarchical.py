@@ -7,7 +7,7 @@ import torch_geometric.nn as gnn
 import torch_geometric_temporal.nn as tgnn
 
 from torch_geometric.nn.inits import glorot, zeros
-from torch_geometric.utils import scatter
+from torch_geometric.utils import scatter, coalesce
 
 
 def getPoolingMatrix(codes, batch):
@@ -15,42 +15,28 @@ def getPoolingMatrix(codes, batch):
         allCodes = []
         for codeSet in codes:
             allCodes.extend(list(codeSet))
-        codes = allCodes
+        codes = torch.tensor([int(code) for code in allCodes], dtype=torch.long, device=batch.device)
 
-    codes = np.array(codes)
-    target = len(codes[0]) - 1
+    parents = torch.div(codes, 10, rounding_mode="floor")
 
-    pools = []
-    batches = []
-    allParents = []
+    paired = torch.stack([batch, parents], dim=1)
+    unique, inverse = torch.unique(paired, dim=0, return_inverse=True)
 
-    batchCopy = batch.clone().cpu()
+    newBatch = unique[:, 0]
+    uniqueParents = unique[:, 1]
 
-    for b in range(batch.max().item() + 1):
-        graphCodes = codes[batchCopy == b]
-        graphParents = [code[:target] for code in graphCodes]
+    counts = torch.zeros(unique.shape[0], device=batch.device)
+    counts.scatter_add_(0, inverse, torch.ones(codes.shape[0], device=batch.device))
 
-        uniqueParents = sorted(set(graphParents))
-        parentIDs = {code: i for i, code in enumerate(uniqueParents)}
+    nodes = torch.arange(codes.shape[0], device=batch.device)
+    values = 1.0 / counts[inverse]
+    indices = torch.stack([inverse, nodes])
+    
+    poolingMatrix = torch.sparse_coo_tensor(
+        indices, values, (unique.shape[0], codes.shape[0]), device=batch.device
+    )
 
-        block = torch.zeros((len(uniqueParents), len(graphCodes)))
-        for nodeID, parentCode in enumerate(graphParents):
-            block[parentIDs[parentCode], nodeID] = 1
-
-        sums = block.sum(dim=1, keepdim=True)
-        block = block / sums
-        
-        pools.append(block)
-
-        batches.append(
-            torch.full((len(uniqueParents),), b, dtype=torch.long)
-        )
-        allParents.extend(uniqueParents)
-
-    poolingMatrix = torch.block_diag(*pools)
-    batch = torch.cat(batches)
-
-    return poolingMatrix, allParents, batch
+    return poolingMatrix, uniqueParents, newBatch
 
 
 def poolEdgeIndex(edges, pool):
@@ -65,6 +51,31 @@ def poolEdgeIndex(edges, pool):
     return edgesPooled
 
 
+class LearnedPoolingWeighting(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+        self.weight = nn.Sequential(
+            nn.Linear(config.in_channels, config.hidden_channels),
+            nn.ReLU(),
+            nn.Linear(config.hidden_channels, 1)
+        )
+
+    def forward(self, x, poolingMatrix, batch):
+        logits = self.weight(x)
+
+        weights = torch.sparse.softmax(
+            poolingMatrix.coalesce().indices(),
+            logits.squeeze(),
+            num_nodes=poolingMatrix.shape[0]
+        )
+
+        pooled = poolingMatrix @ (x * weights.unsqueeze(1))
+
+        return pooled
+
+
 class HierarchicalBasinGCLSTM(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -77,10 +88,15 @@ class HierarchicalBasinGCLSTM(nn.Module):
         self.hiddenBridge = nn.ModuleList([nn.Sequential(
             nn.Linear(config.lstm.in_channels, config.lstm.in_channels),
             nn.Tanh()
-        ) for _ in range(config.layers)])
-        self.cellBridge = nn.ModuleList([nn.Linear(config.lstm.in_channels, config.lstm.in_channels) for _ in range(config.layers)])
+        ) for _ in range(config.layers + (1 if "final" in config else 0))])
+        self.cellBridge = nn.ModuleList([nn.Linear(config.lstm.in_channels, config.lstm.in_channels) 
+        for _ in range(config.layers + (1 if "final" in config else 0))])
 
         self.poolLayers = [layer - 1 for layer in config.poolLayers]
+
+        self.final = None
+        if "final" in config and config.final:
+            self.final = nn.LSTM(config.lstm.in_channels, config.lstm.in_channels, batch_first=True)
 
     def forward(self, inputs, state=None):
         inputShape = inputs.era5.shape
@@ -120,9 +136,12 @@ class HierarchicalBasinGCLSTM(nn.Module):
                 batch = batch.to(x.device)
 
                 pooled = []
+
+                pooled = []
                 for t in range(x.shape[1]):
                     pooled.append(pool @ x[:, t])
                 x = torch.stack(pooled, dim=1)
+                # x = torch.matmul(pool, x)
 
                 # x = pool @ x
                 edges = poolEdgeIndex(edges, pool)
@@ -131,6 +150,16 @@ class HierarchicalBasinGCLSTM(nn.Module):
         for t in range(x.shape[1]):
             outputs.append(gnn.global_mean_pool(x[:, t], batch))
         x = torch.stack(outputs, dim=1)
+
+        if self.final is not None:
+            if state is None:
+                state = None
+            else:
+                state = state[0][-1], state[1][-1]
+            
+            x, (hidden, cell) = self.final(x, state)
+            passHidden.append(self.hiddenBridge[-1](hidden))
+            passCell.append(self.cellBridge[-1](cell))
 
         return x, (passHidden, passCell)
 

@@ -1,7 +1,7 @@
 {
     "path": "data",
     "batchSize": 8,
-    "nodesPerBatch": 10000,
+    "nodesPerBatch": 8000,
     "dataSplit": 0.8,
     "history": 60,
     "future": 7,
@@ -10,20 +10,21 @@
     "appendDimensionPath": "gnnEncoder.block.gnnLSTM.outChannels",
     "gclstm": {
         "basinProjection": {
-            "discreteDim": 12,
+            "discreteDim": 32,
             "dropout": 0.2,
             "outputDim": 256
         },
         "lstm": {
             "in_channels": 256,
             "out_channels": 256,
-            "K": 5
+            "K": 3
         },
         "poolLayers": [
             1,
             2
         ],
-        "layers": 2
+        "layers": 2,
+        "final": true
     },
     "bridge": {
         "in_features": 256,
