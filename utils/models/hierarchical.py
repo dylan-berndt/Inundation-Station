@@ -1,5 +1,6 @@
 from .modules import *
 from ..config import *
+from .sagelstm import *
 
 import numpy as np
 
@@ -83,7 +84,10 @@ class HierarchicalBasinGCLSTM(nn.Module):
 
         self.positional = LearnedPositionalEncoding(config.lstm.in_channels)
         self.basinProjection = DualProjection(config.basinProjection)
-        self.lstms = nn.ModuleList([tgnn.recurrent.GCLSTM(**config.lstm) for _ in range(config.layers)])
+        if config.backend == "gclstm":
+            self.lstms = nn.ModuleList([tgnn.recurrent.GCLSTM(**config.lstm) for _ in range(config.layers)])
+        if config.backend == "sagelstm":
+            self.lstms = nn.ModuleList([SAGELSTM(**config.lstm) for _ in range(config.layers)])
 
         self.hiddenBridge = nn.ModuleList([nn.Sequential(
             nn.Linear(config.lstm.in_channels, config.lstm.in_channels),

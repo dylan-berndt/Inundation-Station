@@ -9,6 +9,9 @@ class Config:
     def keys(self):
         return self._values.keys()
 
+    def __len__(self):
+        return len(self._values.keys())
+
     def __getitem__(self, key):
         if "." in key:
             left, right = key.split(".")[0], ".".join(key.split(".")[1:])

@@ -13,3 +13,6 @@ venv/
 wandb
 
 .env
+
+analysis/
+literature/

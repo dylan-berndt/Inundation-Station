@@ -1,14 +1,16 @@
 {
     "path": "data",
     "batchSize": 8,
-    "nodesPerBatch": 8000,
+    "nodesPerBatch": 2000,
     "dataSplit": 0.8,
     "history": 60,
     "future": 7,
+    "rolling": 30,
     "seed": 1234,
     "excludeDiffBasins": true,
     "appendDimensionPath": "gnnEncoder.block.gnnLSTM.outChannels",
     "gclstm": {
+        "backend": "gclstm",
         "basinProjection": {
             "discreteDim": 32,
             "dropout": 0.2,

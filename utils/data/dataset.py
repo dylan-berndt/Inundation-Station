@@ -48,23 +48,34 @@ def calculateReturnPeriods(df, periods=None, maximums=True):
         q = pearson3.ppf(nonExceedanceProbability, skew, loc=mean, scale=std)
         returnVals[period] = 10 ** q
 
-    return returnVals.values()
+    return list(returnVals.values())
 
 
-# def defaultNoise(minNoise, maxNoise):
-#     def noiseData(data, axis=1):
-#         noiseMult = torch.linspace(minNoise, maxNoise, data.shape[axis])
-#         noise = torch.rand_like(data) * noiseMult.unsqueeze(0)
-#         return data + noise
+# Callable classes rather than closures: DataLoader workers on Windows use
+# spawn, which pickles the Dataset (including self.forecastNoise) to send to
+# each worker process, and local closures can't be pickled.
+class RampNoise:
+    def __init__(self, minNoise, maxNoise):
+        self.minNoise = minNoise
+        self.maxNoise = maxNoise
 
-#     return noiseData
+    def __call__(self, data, axis=1):
+        noiseMult = torch.linspace(self.minNoise, self.maxNoise, data.shape[axis])
+        noise = torch.rand_like(data) * noiseMult.unsqueeze(0)
+        return data + noise
+
+
+class IdentityNoise:
+    def __init__(self, minNoise, maxNoise):
+        self.minNoise = minNoise
+        self.maxNoise = maxNoise
+
+    def __call__(self, data, axis=1):
+        return data
 
 
 def defaultNoise(minNoise, maxNoise):
-    def noiseData(data, axis=1):
-        return data
-
-    return noiseData
+    return IdentityNoise(minNoise, maxNoise)
 
 
 def safeMode(s):
@@ -176,7 +187,9 @@ class InundationData(Dataset):
 
             xMin, xMax = np.nanmin(x), np.nanmax(x)
             yMin, yMax = np.nanmin(y), np.nanmax(y)
-            linspace = np.linspace(xMin, xMax, int(xMax - xMin))
+            # Exact integer-day grid; linspace with span points drifts up to a full
+            # day relative to the daily ERA5 index over a multi-decade series
+            linspace = np.arange(xMin, xMax + 1)
             spline = CubicSpline(x, y, bc_type="natural")
             values = spline(linspace)
             values = np.clip(values, yMin, yMax)
@@ -236,13 +249,22 @@ class InundationData(Dataset):
 
                 basinData[column] = ((basinData[column] / scale) - mean) / std
 
+            if "rolling" in config:
+                weatherColumns = [column for column in basinData.columns if column != "date"]
+                rolled = basinData[weatherColumns].rolling(config.rolling)
+                rollingMeans = rolled.mean().add_suffix(f"_mean{config.rolling}")
+                rollingDevs = rolled.std().add_suffix(f"_std{config.rolling}")
+                basinData = pd.concat([basinData, rollingMeans, rollingDevs], axis=1)
+
             basinData = basinData.to_numpy()
 
             if basinData.shape[1] == 1:
                 start = datetime(1980, 1, 1).timestamp() // 86400
                 end = datetime(2023, 1, 1).timestamp() // 86400
-                basinData = np.zeros([int(end - start), 8])
-                basinData[0, :] = start
+                numWeather = len(self.era5Scales)
+                width = 1 + numWeather * (3 if "rolling" in config else 1)
+                basinData = np.zeros([int(end - start), width])
+                basinData[:, 0] = np.arange(start, end)
                 sumLakes += 1
 
             data = torch.nan_to_num(torch.tensor(basinData, dtype=torch.float32))
@@ -385,12 +407,27 @@ class InundationData(Dataset):
 
             timeSeries = self.grdcDict[key]["Time"]
 
+            # Rolling statistics are NaN for the first (window - 1) days of each
+            # basin's ERA5 series, so samples must start late enough that every
+            # upstream basin has a complete window behind the sample's first day
+            startOffset = 0
+            if "rolling" in config:
+                era5Start = max(int(self.pfafDict[basinID]["Data"][0, 0].item())
+                                for basinID in self.upstreamBasins[translateDict[key]])
+                startOffset = max(0, int(era5Start + config.rolling - 1 - timeSeries[0]))
+
             seriesLength = int(timeSeries[-1] - timeSeries[0])
             seriesLength -= config.history + config.future
-            self.lengths.append(seriesLength)
-            self.indexMap.extend([key] * seriesLength)
-            self.offsetMap.extend(range(seriesLength))
-            self.graphSizes.extend([len(self.upstreamBasins[translateDict[key]])] * seriesLength)
+
+            sampleCount = seriesLength - startOffset
+            if sampleCount <= 0:
+                del self.grdcDict[key]
+                continue
+
+            self.lengths.append(sampleCount)
+            self.indexMap.extend([key] * sampleCount)
+            self.offsetMap.extend(range(startOffset, seriesLength))
+            self.graphSizes.extend([len(self.upstreamBasins[translateDict[key]])] * sampleCount)
 
         if display:
             plt.figure(figsize=(6, 3))
@@ -517,9 +554,11 @@ class InundationData(Dataset):
                 data = self.pfafDict[basin]["Data"]
 
                 first = self.pfafDict[basin]["first"]
-                index = riverTime[0] - first
-                length = riverTime[-1] - riverTime[0]
-                data = data[int(index): int(index + length), 1:]
+                index = int(riverTime[0] - first)
+                # Window must cover all history + future days; the previous
+                # riverTime[-1] - riverTime[0] length was one day short, which
+                # lagged forecast weather one day behind the discharge targets
+                data = data[index: index + self.config.history + self.config.future, 1:]
 
                 data = torch.nan_to_num(data)
 
