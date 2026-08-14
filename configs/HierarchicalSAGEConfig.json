@@ -1,7 +1,7 @@
 {
     "path": "data",
     "batchSize": 8,
-    "nodesPerBatch": 2000,
+    "nodesPerBatch": 10000,
     "dataSplit": 0.8,
     "history": 60,
     "future": 7,
@@ -14,11 +14,11 @@
         "basinProjection": {
             "discreteDim": 32,
             "dropout": 0.2,
-            "outputDim": 256
+            "outputDim": 128
         },
         "lstm": {
-            "in_channels": 256,
-            "out_channels": 256
+            "in_channels": 128,
+            "out_channels": 128
         },
         "poolLayers": [
             1,
@@ -28,13 +28,13 @@
         "final": true
     },
     "bridge": {
-        "in_features": 256,
-        "out_features": 256
+        "in_features": 128,
+        "out_features": 128
     },
     "head": {
-        "inputDim": 256,
+        "inputDim": 128,
         "hiddenDim": 512,
-        "mixtures": 1
+        "mixtures": 4
     },
     "variables": {
         "river": {

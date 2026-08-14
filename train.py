@@ -18,6 +18,8 @@ load_dotenv()
 device = os.environ.get("DEVICE", "cuda") if torch.cuda.is_available() else 'cpu'
 print(device)
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+# os.environ["WANDB_BASE_URL"] = "https://api.wandb.ai"
+# os.environ["WANDB_START_METHOD"] = "thread"
 
 
 # In[2]:
@@ -52,7 +54,7 @@ class EarlyStop:
 
         if (self.total < self.timing) or ((self.total % self.timing) != 0):
             return False
-
+        
         for metric in self.histories:
             recent = np.array(self.histories[metric])[-self.timing:]
 
@@ -73,7 +75,7 @@ class EarlyStop:
         return failing >= self.threshold
 
 
-# In[ ]:
+# In[3]:
 
 
 def itertoolsBetter(dataIter):
@@ -101,7 +103,7 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
     dataset.display(grdcID="4127501")
 
     try:
-        train, test = dataClass.split(dataset, config.dataSplit, seed=config.seed)
+        train, test = dataClass.split(dataset, config.dataSplit, seed=config.seed, numWorkers=12)
 
         # batch1 = next(iter(train))
         # dataset.info(batch1)
@@ -192,9 +194,6 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
 
                 print(f"\r{epoch + 1} | {progress}/{len(train)} | {(progress / len(train)) * 100:.3f}%", end="")
 
-                if stopper(metrics):
-                    raise KeyboardInterrupt
-
                 if (progress + 1) % 2000 == 0: 
                     now = datetime.strftime(start, "%Y-%m-%d %H-%M")
                     modelLocation = os.path.join("checkpoints", now + " " + name)
@@ -246,7 +245,7 @@ deltas = {
 
 models = [HierarchicalBasinStation]
 datasets = [InundationData]
-configs = ["HierarchicalBasinConfig.json"]
+configs = ["HierarchicalSAGEConfig.json"]
 
 for m in range(len(models)):
     chosenModel = models[m]
