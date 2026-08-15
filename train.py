@@ -75,7 +75,7 @@ class EarlyStop:
         return failing >= self.threshold
 
 
-# In[3]:
+# In[ ]:
 
 
 def itertoolsBetter(dataIter):
@@ -130,8 +130,8 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
 
         testIter = itertoolsBetter(test)
 
+        progress = 0
         for epoch in range(epochs):
-            progress = 0
             for inputs, targets in train:
                 inputs, targets = (inputs[0].to(device), inputs[1].to(device)), targets.to(device)
                 model.train()
