@@ -84,7 +84,8 @@ def itertoolsBetter(dataIter):
             yield batch
 
 
-def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict[str: nn.Module], resume=None, deltas={}, name="", runID=None, startPoint=0):
+def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict[str: nn.Module], resume=None, deltas={}, name="", runID=None, startPoint=0,
+                useAMP=True, accumulationSteps=1):
     model = None
     optimizer = None
     train, test = None, None
@@ -120,6 +121,14 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
 
         optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 
+        # bf16 over fp16: no GradScaler needed (bf16 has fp32's exponent range, so no
+        # underflow/overflow risk the way fp16 has), and CMALLoss leans on log()/division
+        # by small clipped betas where fp16's narrower range would be more likely to
+        # over/underflow. autocast already keeps numerically sensitive ops like log/exp/
+        # softmax in fp32 internally regardless, so this doesn't need manual casting.
+        ampDeviceType = "cuda" if "cuda" in device else "cpu"
+        amp = torch.autocast(device_type=ampDeviceType, dtype=torch.bfloat16, enabled=useAMP)
+
         if resume is not None:
             stateDict = torch.load(os.path.join(resume, "checkpoint.pt"), weights_only=True)
             model.load_state_dict(stateDict)
@@ -132,21 +141,22 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
         testLossWindow = []
 
         progress = 0
+        optimizer.zero_grad()
         for epoch in range(epochs):
             for inputs, targets in train:
                 inputs, targets = (inputs[0].to(device), inputs[1].to(device)), targets.to(device)
                 model.train()
-                optimizer.zero_grad()
 
                 metrics = {}
 
                 history, future = targets.dischargeHistory, targets.dischargeFuture
                 thresholds, means, deviations = targets.thresholds, targets.mean.unsqueeze(-1), targets.deviation.unsqueeze(-1)
-                with record_function("model_inference"):
-                    hindcast, forecast = model(inputs)
-                loss = objective(forecast, future)
+                with amp:
+                    with record_function("model_inference"):
+                        hindcast, forecast = model(inputs)
+                    loss = objective(forecast, future)
 
-                loss = torch.mean(loss)
+                    loss = torch.mean(loss)
 
                 # Averaging samples *after* backward() rather than before matters once
                 # transform.backward is nonlinear (logTransform=True): an affine backward
@@ -162,8 +172,15 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
 
                 metrics["Train Loss"] = loss.detach().cpu().item()
 
-                loss.backward()
-                optimizer.step()
+                # Divide before backward so accumulated grads average to (approximately,
+                # given GraphSizeSampler batches aren't fixed-size) the same magnitude as a
+                # single step's grad would be - otherwise accumulationSteps micro-batches
+                # would sum to an effective loss/LR accumulationSteps times too large.
+                (loss / accumulationSteps).backward()
+
+                if (progress + 1) % accumulationSteps == 0:
+                    optimizer.step()
+                    optimizer.zero_grad()
 
                 torch.cuda.empty_cache()
 
@@ -174,9 +191,10 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
 
                     history1, future1 = targets1.dischargeHistory, targets1.dischargeFuture
                     thresholds1, means1, deviations1 = targets1.thresholds, targets1.mean.unsqueeze(-1), targets1.deviation.unsqueeze(-1)
-                    hindcast1, forecast1 = model(inputs1)
-                    loss1 = objective(forecast1, future1)
-                    loss1 = torch.mean(loss1)
+                    with amp:
+                        hindcast1, forecast1 = model(inputs1)
+                        loss1 = objective(forecast1, future1)
+                        loss1 = torch.mean(loss1)
 
                     forecast1 = torch.mean(dataset.transform.backward(CMAL.sample(*forecast1, 10000)), dim=-1)
                     future1 = dataset.transform.backward(future1)
@@ -275,6 +293,14 @@ configs = ["HierarchicalSAGEConfig.json"]
 # starvation feedback loop where shrinking predicted scale amplifies its own
 # gradient. Still a single forward/backward pass per step - betaNLL only detaches
 # the *weight* multiplying the loss, it does not require re-running the model.
+#
+# trainModel(..., useAMP=True, accumulationSteps=1): useAMP runs the model forward
+# pass and loss in bf16 autocast (on by default, no-op on CPU) - roughly halves
+# activation memory, which is what nodesPerBatch is actually bottlenecked on.
+# accumulationSteps>1 delays optimizer.step()/zero_grad() until that many batches
+# have accumulated gradients, trading wall-clock for the gradient-noise reduction
+# of a larger effective nodesPerBatch without the memory cost - useful once AMP
+# alone still doesn't leave room for a batch size you're happy with.
 for m in range(len(models)):
     chosenModel = models[m]
     chosenDataset = datasets[m]
