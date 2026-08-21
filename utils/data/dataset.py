@@ -13,6 +13,7 @@ from scipy.stats import mode
 
 import networkx as nx
 import duckdb
+import hashlib
 
 from .precompute import *
 from ..config import *
@@ -101,6 +102,24 @@ def downsampleBasinATLAS(gdf, downsampling, continuousColumns, discreteColumns, 
     grouped["PFAF_ID"] = grouped.index
 
     return grouped
+
+
+def stableGaugeSplit(riverIDs, trainSplit, seed):
+    # Assigns each gauge to train/test from a hash of (seed, gaugeID) alone, rather
+    # than an index into np.random.choice over the current population. That makes
+    # index-based selection reshuffle every gauge's assignment whenever the
+    # population changes size or order even slightly - which happens silently
+    # whenever glob() returns GRDC files in a different order, or a borderline
+    # gauge flips across the areaDiff/NaN-fraction filters in __init__. Hashing
+    # per gauge keeps every other gauge's assignment fixed when the population
+    # changes, at the cost of the split ratio being approximate rather than exact.
+    trainIDs = []
+    for riverID in sorted(riverIDs):
+        digest = hashlib.md5(f"{seed}-{riverID}".encode()).hexdigest()
+        fraction = int(digest[:8], 16) / 0xFFFFFFFF
+        if fraction < trainSplit:
+            trainIDs.append(riverID)
+    return trainIDs
 
 
 # TODO: Refactor into discrete steps to improve readability
@@ -445,7 +464,7 @@ class InundationData(Dataset):
             plt.show()
 
         self.targetMean = np.mean(allTargets)
-        self.transform = streamflowProcess(np.array(allTargets))
+        self.transform = streamflowProcess(np.array(allTargets), log=("logTransform" in config and config.logTransform))
 
         print("Index Mapping Complete")
 
@@ -727,7 +746,7 @@ class InundationData(Dataset):
 
         # TODO: More stratified subsets using dataset.lengths and geographic information
         riverIDs = list(dataset.grdcDict.keys())
-        trainIDs = np.array(riverIDs)[np.random.choice(len(riverIDs), int(len(riverIDs) * trainSplit), replace=False)]
+        trainIDs = stableGaugeSplit(riverIDs, trainSplit, seed)
         trainIndexMask = np.isin(dataset.indexMap, trainIDs)
         trainIndex = np.arange(len(dataset))[trainIndexMask]
         testIndex = np.arange(len(dataset))[~trainIndexMask]
@@ -893,7 +912,7 @@ class FloodHubData(InundationData):
         np.random.seed(seed)
 
         riverIDs = list(dataset.grdcDict.keys())
-        trainIDs = np.array(riverIDs)[np.random.choice(len(riverIDs), int(len(riverIDs) * trainSplit), replace=False)]
+        trainIDs = stableGaugeSplit(riverIDs, trainSplit, seed)
         trainIndexMask = np.isin(dataset.indexMap, trainIDs)
         trainIndex = np.arange(len(dataset))[trainIndexMask]
         testIndex = np.arange(len(dataset))[~trainIndexMask]

@@ -234,10 +234,19 @@ def identity(x):
 
 
 class CMALLoss(nn.Module):
-    def __init__(self, reduction=None):
+    # betaNLL > 0 applies the Seitzer et al. (2022) beta-NLL reweighting to curb
+    # heteroscedastic "variance starvation": each timestep's negative log-density is
+    # scaled by stopgrad(scale) ** betaNLL, where scale is the mixture's pi-weighted
+    # beta (a stand-in for the single-Gaussian variance the original paper uses).
+    # stopgrad only detaches the *weight* - m/b/t/p still receive their normal
+    # gradients through the unweighted log-likelihood term, so this is still a single
+    # forward/backward pass per step, not two. betaNLL=0 (default) reproduces the
+    # original loss exactly.
+    def __init__(self, reduction=None, betaNLL=0.0):
         super().__init__()
 
         self.reduction = identity if reduction is None else torch.mean
+        self.betaNLL = betaNLL
 
     def forward(self, yPred, yTrue):
         m, b, t, p = yPred
@@ -246,7 +255,13 @@ class CMALLoss(nn.Module):
         logLike = torch.log(t) + torch.log(1.0 - t) - torch.log(b) - torch.max(t * error, (t - 1.0) * error) / b
         logWeights = torch.log(p + 1e-4)
 
-        result = torch.logsumexp(logWeights + logLike, dim=2)
+        componentLL = logWeights + logLike
+        result = torch.logsumexp(componentLL, dim=2)
+
+        if self.betaNLL > 0:
+            scale = torch.sum(p * b, dim=2).detach()
+            result = result * torch.pow(scale, self.betaNLL)
+
         result = -self.reduction(torch.sum(result, dim=1))
         return result
 
@@ -366,13 +381,21 @@ class CMALF1(nn.Module):
     
 
 class CMALNSE(nn.Module):
+    # With grdcID supplied, NSE is computed per gauge over the rolling buffer and
+    # the *median* across gauges is reported, rather than one ratio pooled across
+    # every sample. Pooling num/denom before dividing once (the old default, still
+    # used when grdcID is omitted) is already fairly robust to a single degenerate
+    # gauge, but "robust" isn't "immune": a per-gauge median is the version that
+    # can't be dragged arbitrarily low by one near-constant-flow gauge whose NSE
+    # denominator (its own historical variance) happens to be near zero - see
+    # Schaefli & Gupta (2007) on NSE's instability for low-variability catchments.
     def __init__(self, batches=100):
         super().__init__()
         self.numBatches = batches
         self.batches = []
 
-    def forward(self, yPred, yTrue, means, *args, **kwargs):
-        self.batches.append((yPred, yTrue, means))
+    def forward(self, yPred, yTrue, means, grdcID=None, *args, **kwargs):
+        self.batches.append((yPred, yTrue, means, grdcID))
 
         if len(self.batches) > self.numBatches:
             self.batches = self.batches[1:]
@@ -381,12 +404,26 @@ class CMALNSE(nn.Module):
         yTrueC = torch.cat([batch[1] for batch in self.batches], dim=0)
         meansC = torch.cat([batch[2] for batch in self.batches], dim=0)
 
-        # NSE per gauge
-        numerator = torch.sum(torch.pow(yTrueC - yPredV, 2))
-        denominator = torch.sum(torch.pow(yTrueC - meansC, 2))
+        haveGauges = grdcID is not None and all(batch[3] is not None for batch in self.batches)
 
-        value = 1 - (numerator / denominator)
-        return value
+        if not haveGauges:
+            numerator = torch.sum(torch.pow(yTrueC - yPredV, 2))
+            denominator = torch.sum(torch.pow(yTrueC - meansC, 2))
+            return 1 - (numerator / denominator)
+
+        gaugeIDs = sum([list(batch[3]) for batch in self.batches], [])
+
+        numerator = torch.sum(torch.pow(yTrueC - yPredV, 2), dim=1)
+        denominator = torch.sum(torch.pow(yTrueC - meansC, 2), dim=1)
+
+        perGauge = {}
+        for i, gaugeID in enumerate(gaugeIDs):
+            entry = perGauge.setdefault(gaugeID, [0.0, 0.0])
+            entry[0] = entry[0] + numerator[i]
+            entry[1] = entry[1] + denominator[i]
+
+        nseValues = torch.stack([1 - (num / (den + 1e-8)) for num, den in perGauge.values()])
+        return torch.median(nseValues)
     
 
 class Pearson(nn.Module):

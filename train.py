@@ -129,6 +129,7 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
                 optimizer.load_state_dict(stateDict)
 
         testIter = itertoolsBetter(test)
+        testLossWindow = []
 
         progress = 0
         for epoch in range(epochs):
@@ -147,11 +148,16 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
 
                 loss = torch.mean(loss)
 
-                forecast = dataset.transform.backward(torch.mean(CMAL.sample(*forecast, 10000), dim=-1))
+                # Averaging samples *after* backward() rather than before matters once
+                # transform.backward is nonlinear (logTransform=True): an affine backward
+                # commutes with mean(), a log/exp one doesn't, so backward-then-mean would
+                # silently compute a geometric-mean point estimate instead of the intended
+                # arithmetic mean.
+                forecast = torch.mean(dataset.transform.backward(CMAL.sample(*forecast, 10000)), dim=-1)
                 future = dataset.transform.backward(future)
 
                 for eval in criterion:
-                    evaluated = criterion[eval](forecast.detach(), future.detach(), thresholds=thresholds, means=means, deviations=deviations)
+                    evaluated = criterion[eval](forecast.detach(), future.detach(), thresholds=thresholds, means=means, deviations=deviations, grdcID=inputs[0].grdcID)
                     metrics["Train " + eval] = evaluated.detach().cpu().item()
 
                 metrics["Train Loss"] = loss.detach().cpu().item()
@@ -172,14 +178,25 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
                     loss1 = objective(forecast1, future1)
                     loss1 = torch.mean(loss1)
 
-                    forecast1 = dataset.transform.backward(torch.mean(CMAL.sample(*forecast1, 10000), dim=-1))
+                    forecast1 = torch.mean(dataset.transform.backward(CMAL.sample(*forecast1, 10000)), dim=-1)
                     future1 = dataset.transform.backward(future1)
 
                     for eval in criterion:
-                        evaluated = testCriterion[eval](forecast1.detach(), future1.detach(), thresholds=thresholds1, means=means1, deviations=deviations1)
+                        evaluated = testCriterion[eval](forecast1.detach(), future1.detach(), thresholds=thresholds1, means=means1, deviations=deviations1, grdcID=inputs1[0].grdcID)
                         metrics["Test " + eval] = evaluated.detach().cpu().item()
 
                     metrics["Test Loss"] = loss1.detach().cpu().item()
+
+                    # Test Loss above is a single recycled batch (GraphSizeSampler batch
+                    # membership is fixed for the run's lifetime, so this cycles through the
+                    # same handful of batches on repeat) - noisy and, if a bad batch recurs,
+                    # misleadingly trending. This rolling mean over the last 500 steps smooths
+                    # that out without waiting for a full epoch, which at ~2 epochs of total
+                    # training budget would rarely log more than once or twice anyway.
+                    testLossWindow.append(metrics["Test Loss"])
+                    if len(testLossWindow) > 500:
+                        testLossWindow.pop(0)
+                    metrics["Test Loss (500-step avg)"] = sum(testLossWindow) / len(testLossWindow)
 
                 if (progress + 1) % 10 == 0:
                     gc.collect()
@@ -247,13 +264,24 @@ models = [HierarchicalBasinStation]
 datasets = [InundationData]
 configs = ["HierarchicalSAGEConfig.json"]
 
+# Set config.logTransform = True (or add "logTransform": true to the config JSON)
+# before dataset construction to fit the target z-score in log10 space instead of
+# linear space - compresses the heavy right tail that small/headwater catchments
+# get from area-normalizing discharge, without changing what any downstream metric
+# (NMAE/F1/NSE) means, since those are all computed after transform.backward() puts
+# predictions back in real, linear discharge units either way.
+#
+# Pass CMALLoss(betaNLL=0.5) (0..1; 0 = current behavior) to damp the variance-
+# starvation feedback loop where shrinking predicted scale amplifies its own
+# gradient. Still a single forward/backward pass per step - betaNLL only detaches
+# the *weight* multiplying the loss, it does not require re-running the model.
 for m in range(len(models)):
     chosenModel = models[m]
     chosenDataset = datasets[m]
     config = Config().load(os.path.join("configs", configs[m]))
 
     name = configs[m].removesuffix("Config.json")
-    model, (train, test), prof = trainModel(config, chosenModel, chosenDataset, CMALLoss(), epochs=10, criterion=metrics, 
+    model, (train, test), prof = trainModel(config, chosenModel, chosenDataset, CMALLoss(), epochs=10, criterion=metrics,
                                             deltas=deltas, name=name)
     del chosenModel, chosenDataset, model, train, test
     gc.collect()

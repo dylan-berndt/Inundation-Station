@@ -8,11 +8,18 @@ class Transform:
         self.backward = backward
 
 
-def streamflowProcess(targets):
-    # t = np.log10(targets + 1e-6)
+def streamflowProcess(targets, log=False):
+    if log:
+        eps = 1e-6
+        logTargets = np.log10(np.clip(targets, eps, np.inf))
+        mean = np.mean(logTargets)
+        std = np.std(logTargets)
+        return Transform(lambda x: (torch.log10(torch.clamp(x, min=eps)) - mean) / std,
+                         lambda x: torch.pow(10, (std * x) + mean))
+
     mean = np.mean(targets)
     std = np.std(targets)
-    return Transform(lambda x: (x - mean) / std, 
+    return Transform(lambda x: (x - mean) / std,
                      lambda x: (std * x) + mean)
 
 
