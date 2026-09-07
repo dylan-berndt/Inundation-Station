@@ -1,0 +1,808 @@
+<title>Inundation Station Post-Mortem</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --ground:#F1F4F1;
+  --panel:#FFFFFF;
+  --panel-2:#E9EEEA;
+  --ink:#15232A;
+  --ink-2:#3A4B52;
+  --muted:#66787D;
+  --rule:#D2DAD5;
+  --rule-2:#BCC7C1;
+  --accent:#1F6F8B;
+  --accent-soft:#DCE9EC;
+  --stage:#AC4227;
+  --stage-soft:#F4E1DB;
+  --ok:#4A7548;
+  --ok-soft:#E0EBDE;
+  --warn:#9A6B18;
+  --warn-soft:#F3E9D5;
+  --shadow:0 1px 2px rgba(21,35,42,.06), 0 8px 24px -16px rgba(21,35,42,.28);
+  --f-display:"Zilla Slab", Georgia, serif;
+  --f-body:"IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --measure:68ch;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E1518;
+    --panel:#151E22;
+    --panel-2:#1C272C;
+    --ink:#E3EAE6;
+    --ink-2:#B6C4C4;
+    --muted:#8699A0;
+    --rule:#25333A;
+    --rule-2:#33454D;
+    --accent:#57A8C2;
+    --accent-soft:#152F3A;
+    --stage:#E08063;
+    --stage-soft:#39211A;
+    --ok:#7FB07C;
+    --ok-soft:#1B2A1C;
+    --warn:#D5A959;
+    --warn-soft:#332916;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E1518;
+  --panel:#151E22;
+  --panel-2:#1C272C;
+  --ink:#E3EAE6;
+  --ink-2:#B6C4C4;
+  --muted:#8699A0;
+  --rule:#25333A;
+  --rule-2:#33454D;
+  --accent:#57A8C2;
+  --accent-soft:#152F3A;
+  --stage:#E08063;
+  --stage-soft:#39211A;
+  --ok:#7FB07C;
+  --ok-soft:#1B2A1C;
+  --warn:#D5A959;
+  --warn-soft:#332916;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--ground);
+  color:var(--ink);
+  font-family:var(--f-body);
+  font-size:16px;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1100px;margin:0 auto;padding:0 28px 96px}
+.col{max-width:var(--measure)}
+
+/* ---------- masthead ---------- */
+.mast{
+  border-bottom:2px solid var(--ink);
+  padding:44px 0 20px;
+  margin-bottom:34px;
+}
+.eyebrow{
+  font-family:var(--f-mono);
+  font-size:11.5px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--muted);
+  display:flex;flex-wrap:wrap;gap:10px 22px;
+}
+h1{
+  font-family:var(--f-display);
+  font-weight:700;
+  font-size:clamp(34px,5.4vw,54px);
+  line-height:1.04;
+  letter-spacing:-.015em;
+  margin:16px 0 10px;
+  text-wrap:balance;
+}
+.dek{
+  font-size:18.5px;
+  line-height:1.55;
+  color:var(--ink-2);
+  max-width:64ch;
+  margin:0;
+}
+.dek b{color:var(--ink);font-weight:600}
+
+/* ---------- verdict strip ---------- */
+.verdict{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:1px;
+  background:var(--rule);
+  border:1px solid var(--rule);
+  margin:30px 0 10px;
+}
+.vcell{background:var(--panel);padding:16px 18px}
+.vnum{
+  font-family:var(--f-mono);
+  font-size:26px;font-weight:600;
+  letter-spacing:-.02em;
+  color:var(--accent);
+  font-variant-numeric:tabular-nums;
+  line-height:1.1;
+}
+.vcell.crit .vnum{color:var(--stage)}
+.vlab{font-size:12.5px;color:var(--muted);margin-top:5px;line-height:1.35}
+
+/* ---------- structure ---------- */
+h2{
+  font-family:var(--f-display);
+  font-weight:600;
+  font-size:27px;
+  letter-spacing:-.01em;
+  line-height:1.2;
+  margin:0 0 6px;
+  text-wrap:balance;
+}
+h3{
+  font-family:var(--f-display);
+  font-weight:600;font-size:19px;
+  margin:30px 0 8px;letter-spacing:-.005em;
+}
+section{padding:44px 0 0;border-top:1px solid var(--rule);margin-top:44px}
+section:first-of-type{border-top:none}
+.snum{
+  font-family:var(--f-mono);font-size:11.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--accent);margin-bottom:12px;
+}
+p{margin:0 0 15px}
+.col p, .col ul, .col ol{max-width:var(--measure)}
+ul,ol{margin:0 0 15px;padding-left:1.15em}
+li{margin-bottom:7px}
+li::marker{color:var(--muted)}
+strong{font-weight:600}
+a{color:var(--accent)}
+code,.m{font-family:var(--f-mono);font-size:.885em;background:var(--panel-2);padding:1px 5px;border-radius:2px;color:var(--ink)}
+.lede{font-size:17.5px;color:var(--ink-2);max-width:64ch}
+
+/* ---------- findings ---------- */
+.finding{
+  background:var(--panel);
+  border:1px solid var(--rule);
+  border-left:4px solid var(--rule-2);
+  padding:20px 22px 18px;
+  margin:20px 0;
+  box-shadow:var(--shadow);
+}
+.finding.blocking{border-left-color:var(--stage)}
+.finding.major{border-left-color:var(--warn)}
+.finding.minor{border-left-color:var(--accent)}
+.fhead{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;margin-bottom:8px}
+.fid{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-weight:500}
+.ftitle{font-family:var(--f-display);font-size:19.5px;font-weight:600;line-height:1.25;flex:1 1 260px;letter-spacing:-.005em}
+.tag{
+  font-family:var(--f-mono);font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;
+  padding:3px 8px;border-radius:2px;font-weight:500;white-space:nowrap;
+}
+.tag.blocking{background:var(--stage-soft);color:var(--stage)}
+.tag.major{background:var(--warn-soft);color:var(--warn)}
+.tag.minor{background:var(--accent-soft);color:var(--accent)}
+.finding p{margin-bottom:12px}
+.finding p:last-child{margin-bottom:0}
+.ev{
+  background:var(--panel-2);
+  border-left:2px solid var(--rule-2);
+  padding:11px 14px;
+  font-family:var(--f-mono);
+  font-size:12.5px;
+  line-height:1.7;
+  overflow-x:auto;
+  margin:12px 0;
+}
+.ev b{color:var(--accent);font-weight:600}
+.ev .bad{color:var(--stage);font-weight:600}
+.evlab{
+  display:block;font-family:var(--f-mono);font-size:10.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:6px;
+}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;margin:20px 0;border:1px solid var(--rule);background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+caption{
+  caption-side:top;text-align:left;padding:13px 16px 11px;
+  font-family:var(--f-mono);font-size:11px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);border-bottom:1px solid var(--rule);
+}
+th,td{padding:8px 14px;text-align:right;border-bottom:1px solid var(--rule);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{
+  font-family:var(--f-mono);font-size:11px;font-weight:500;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted);vertical-align:bottom;white-space:normal;
+}
+tbody td{font-variant-numeric:tabular-nums;font-family:var(--f-mono);font-size:12.5px}
+tbody td:first-child{font-family:var(--f-body);font-size:13.5px}
+tbody tr:last-child td{border-bottom:none}
+tbody tr.hl td{background:var(--accent-soft)}
+td.neg{color:var(--stage)}
+td.pos{color:var(--ok)}
+.tnote{font-size:12.5px;color:var(--muted);margin:-10px 0 22px;max-width:76ch;line-height:1.5}
+
+/* ---------- figures ---------- */
+figure{margin:26px 0;background:var(--panel);border:1px solid var(--rule);padding:18px 18px 14px}
+figure svg{display:block;width:100%;height:auto}
+figcaption{font-size:12.5px;color:var(--muted);margin-top:10px;line-height:1.5;max-width:80ch}
+figcaption b{color:var(--ink-2);font-weight:600}
+.figtitle{font-family:var(--f-display);font-size:16px;font-weight:600;margin-bottom:2px}
+.figsub{font-family:var(--f-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+
+/* ---------- misc ---------- */
+.callout{
+  background:var(--accent-soft);
+  border:1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  padding:18px 20px;margin:22px 0;
+}
+.callout .clab{
+  font-family:var(--f-mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--accent);margin-bottom:7px;
+}
+.callout p:last-child{margin-bottom:0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin:22px 0}
+.stack{background:var(--panel);border:1px solid var(--rule);padding:18px 20px}
+.stack h4{font-family:var(--f-display);font-size:16.5px;font-weight:600;margin:0 0 8px}
+.stack ul{margin-bottom:0;font-size:14.5px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;font-family:var(--f-mono);font-size:11.5px;color:var(--muted);margin-bottom:12px}
+.key{display:inline-flex;align-items:center;gap:6px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.foot{margin-top:56px;padding-top:22px;border-top:2px solid var(--ink);font-size:13px;color:var(--muted);max-width:80ch}
+.foot p{margin-bottom:9px}
+::selection{background:var(--accent);color:var(--panel)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:no-preference){
+  .finding{transition:box-shadow .2s ease}
+}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">
+    <span>Post-mortem</span>
+    <span>Inundation Station · GRDC North America</span>
+    <span>805 gauges · 161 held out · 2.1 M evaluated sample-days</span>
+  </div>
+  <h1>Why the graph model never beat the lumped baseline</h1>
+  <p class="dek">The short answer is that the hypothesis was never tested. In the model that produced every published comparison, <b>the graph neural network is disconnected from the output</b> — 15.5 M of its 19.5 M parameters received no gradient across 36,000 optimizer steps. Underneath that sit five measurement defects and one objective-design problem that would have hidden a real effect even if the graph had been wired in.</p>
+
+  <div class="verdict">
+    <div class="vcell crit"><div class="vnum">0 / 160</div><div class="vlab">GNN tensors receiving a gradient in the benchmarked model</div></div>
+    <div class="vcell crit"><div class="vnum">79.4 %</div><div class="vlab">of parameters untrainable by construction</div></div>
+    <div class="vcell"><div class="vnum">0.949</div><div class="vlab">rank correlation between “STGNN” and FloodHub per-gauge NSE</div></div>
+    <div class="vcell"><div class="vnum">0.056</div><div class="vlab">median-NSE spread <em>between</em> architectures — identical to the spread <em>within</em> one</div></div>
+    <div class="vcell"><div class="vnum">51.9 %</div><div class="vlab">of days exceed the “1-year flood” threshold that is reported as a headline metric</div></div>
+  </div>
+</header>
+
+<section>
+  <div class="snum">01 — Calibration</div>
+  <h2>What the field actually claims, and what it claims it about</h2>
+  <div class="col">
+    <p>Three reference points frame everything below.</p>
+    <p><strong>Google Flood Hub</strong> (Nearing et al., <em>Nature</em> 2024) is an encoder–decoder LSTM, hidden size 256, with a <strong>365-day hindcast window</strong>, an asymmetric-Laplacian output head, and four forcing products (ERA5-Land, IMERG, CPC, ECMWF HRES) area-averaged over the full upstream polygon. It is trained on <strong>5,680 gauges</strong> for 50,000 minibatches of 256, ensembled over three seeds, and evaluated by 10-fold cross-validation over gauges <em>with a one-year temporal buffer</em> between any training and test data. An event counts as detected when the modelled and observed hydrographs each cross <em>their own</em> return-period threshold within two days of each other.</p>
+    <p><strong>RiverMamba</strong> (NeurIPS 2025) is the current state of the art and it does use spatial structure — but at <strong>0.05° (≈25 km² per cell)</strong> over 1.5 M river points, with 96 static and four dynamic input sources. Its ablation is the relevant one: removing spatial relations from the forecast module costs 0.085 F1. On GRDC observations it reaches F1 0.243 against an LSTM's 0.148 and GloFAS's 0.204.</p>
+    <p>And the <strong>GNN-in-hydrology literature is cautionary where it is not carefully scoped</strong>. Sun et al. (WRR 2021) found spectral GNNs underperform a plain LSTM on most CAMELS basins, attributing it to oversmoothing. Jia et al. (HESS 2022) found the physical river network largely <em>optional</em> — randomly dropped edges and a graph coarsened from 295 nodes to 23 pour-points performed comparably. The one clean positive result (HESS 2026) puts the GNN in a specific place: a <strong>routing module operating on the outputs of per-subbasin LSTMs</strong>, not as a replacement for the rainfall-runoff model itself.</p>
+    <div class="callout">
+      <div class="clab">Implication for this project</div>
+      <p>Spatial structure is known to help when it is fine-grained and used for routing. This repository discretizes at HydroBASINS <strong>level 7 — a measured median of 2,430 km² per graph node</strong>, roughly 100× coarser than RiverMamba — and applies the GNN to rainfall-runoff generation rather than routing. Even a correctly implemented graph would be starting from a weak position.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="snum">02 — The blocking defect</div>
+  <h2>The benchmarked “STGNN” contains no graph</h2>
+  <div class="col">
+    <p>In <code>ComboGNNCoder.forward</code>, the GNN stack writes into a variable called <code>positional</code>. The readout that feeds the CMAL head reads from <code>projected</code> — the pre-GNN per-node embedding. One character of variable name separates the two, and the entire spatial branch is computed at full cost and discarded.</p>
+  </div>
+
+  <div class="finding blocking">
+    <div class="fhead"><span class="fid">F1</span><span class="ftitle">The graph branch is not in the computational graph of the loss</span><span class="tag blocking">Blocking</span></div>
+    <p>Three independent tests agree, run against the exact code revision (<code>1e6eb69</code>) in force for all four <code>Combo ChebBlock5</code> runs. The bug was introduced with the Combo model on 2026-01-19 and is still present at <code>HEAD</code>.</p>
+    <div class="ev">
+      <span class="evlab">Test 1 — perturb every GNN weight by N(0, 50), trained config</span>
+      max |&Delta;&mu;| = <b class="bad">0.000e+00</b> &nbsp; max |&Delta;b| = <b class="bad">0.000e+00</b> &nbsp; max |&Delta;&tau;| = <b class="bad">0.000e+00</b> &nbsp; max |&Delta;&pi;| = <b class="bad">0.000e+00</b>
+    </div>
+    <div class="ev">
+      <span class="evlab">Test 2 — rewire edge_index on the trained checkpoint</span>
+      max |&Delta;&mu;| = <b class="bad">0.000e+00</b> &nbsp; (the river network has no influence on the prediction)
+    </div>
+    <div class="ev">
+      <span class="evlab">Test 3 — backward pass</span>
+      GNN-block tensors receiving a gradient . . . . <b class="bad">0 / 160</b><br>
+      all tensors receiving a gradient . . . . . . . <b>78 / 818</b><br>
+      untrainable parameters . . . . . . . . . . . . <b class="bad">15,506,368 / 19,525,380 (79.4 %)</b><br>
+      control — <code>InundationBlockStation</code>, same GNN . <b>144 / 160</b> ✓
+    </div>
+    <p>The saved optimizer state confirms it independently and for every run: after <strong>36,000 Adam steps</strong>, 740 of 818 parameter tensors have <em>no optimizer state entry at all</em> — PyTorch skips parameters whose gradient is <code>None</code>. Across all four Combo runs, 550 of 582 graph-related tensors are in that set, including every <code>ChebConv</code>.</p>
+    <p>What was actually benchmarked is therefore: <strong>the FloodHub baseline, plus a memoryless MLP on the outlet sub-basin's own weather</strong>, concatenated at the head. That prediction is directly confirmed by the test-set behaviour — the two “different architectures” have a rank correlation of <strong>0.949</strong> on per-gauge NSE and <strong>0.982</strong> on per-gauge Pearson <em>r</em>. They are the same model.</p>
+    <p>The compute cost of the dead branch is measurable: <strong>3.06 s/step for Combo against 0.229 s/step for FloodHub</strong> — a 13× slowdown, over four runs of ~30 h each, for a branch that contributed nothing.</p>
+  </div>
+
+  <div class="col">
+    <p>Two consequences worth stating plainly. First, no conclusion in the repository about graph neural networks for streamflow is supported by its own evidence — the experiment did not run. Second, the correctly wired models do exist: <code>InundationBlockStation</code>, <code>HierarchicalBasinStation</code> and <code>HierarchicalSAGE</code> all pass the gradient test. <strong>None of them has a <code>metrics.json</code></strong>; they were never taken through the test-set evaluation.</p>
+  </div>
+</section>
+
+<section>
+  <div class="snum">03 — Statistical power</div>
+  <h2>The comparison could not have detected the effect it was looking for</h2>
+  <div class="col">
+    <p>Set the wiring bug aside and treat the eight completed test evaluations as a designed experiment: four <code>FloodHub</code> runs and four <code>Combo ChebBlock5</code> runs, same 161 held-out gauges, same 2.1 M sample-days. The proper null is the spread between two runs of the <em>same</em> architecture.</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <caption>Eight completed test evaluations · 160 common gauges · per-gauge scores</caption>
+      <thead><tr><th>Run</th><th>Family</th><th>Steps</th><th>Median NSE</th><th>Mean F1 @ 2 yr</th><th>Mean F1 @ 5 yr</th><th>Median r</th><th>&sigma;<sub>pred</sub>/&sigma;<sub>obs</sub></th></tr></thead>
+      <tbody>
+        <tr><td>2026-01-23 Combo</td><td>Combo</td><td>56,000</td><td>0.489</td><td>0.154</td><td>0.056</td><td>0.756</td><td>0.708</td></tr>
+        <tr><td>2026-01-25 Combo</td><td>Combo</td><td>20,000</td><td>0.464</td><td>0.134</td><td>0.042</td><td>0.749</td><td>0.717</td></tr>
+        <tr><td>2026-01-25 FloodHub</td><td>FloodHub</td><td>32,000</td><td>0.420</td><td>0.142</td><td>0.042</td><td>0.733</td><td>0.732</td></tr>
+        <tr><td>2026-01-20 FloodHub</td><td>FloodHub</td><td>60,000</td><td>0.468</td><td>0.174</td><td>0.066</td><td>0.742</td><td>0.736</td></tr>
+        <tr><td>2026-01-24 FloodHub</td><td>FloodHub</td><td>20,000</td><td>0.431</td><td>0.156</td><td>0.046</td><td>0.730</td><td>0.779</td></tr>
+        <tr class="hl"><td>2026-01-28 Combo <em>(published)</em></td><td>Combo</td><td>36,000</td><td>0.551</td><td>0.235</td><td>0.108</td><td>0.784</td><td>0.801</td></tr>
+        <tr class="hl"><td>2026-01-26 FloodHub <em>(published)</em></td><td>FloodHub</td><td>36,000</td><td>0.542</td><td>0.250</td><td>0.119</td><td>0.796</td><td>0.806</td></tr>
+        <tr><td>2026-01-24 Combo</td><td>Combo</td><td>16,000</td><td>0.478</td><td>0.213</td><td>0.080</td><td>0.751</td><td>0.832</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="tnote">Rows sorted by dispersion ratio, not by family. Note that the two rows used in <code>compare.py</code> are simply the two runs that happen to sit highest on that axis.</p>
+
+  <div class="finding major">
+    <div class="fhead"><span class="fid">F2</span><span class="ftitle">Between-architecture variance equals within-architecture variance</span><span class="tag major">Major</span></div>
+    <div class="ev">
+      <span class="evlab">|&Delta; median NSE| over all run pairs</span>
+      within the same family (n=12) . . . mean <b>0.056</b> &nbsp; max <b>0.122</b><br>
+      between the two families (n=16) . . mean <b>0.055</b> &nbsp; max <b>0.131</b>
+    </div>
+    <div class="ev">
+      <span class="evlab">|&Delta; median F1 @ 2 yr| over all run pairs</span>
+      within the same family . . . mean <b>0.072</b><br>
+      between the two families . . mean <b>0.060</b> &nbsp; <span class="bad">(smaller than within)</span>
+    </div>
+    <p>The best and worst <code>FloodHub</code> runs differ by <strong>0.108 in mean F1 @ 2 yr</strong> — a 77 % relative swing between two runs of the same model. A paired Wilcoxon test between two <code>FloodHub</code> runs returns <em>p</em> = 0.015; between the best FloodHub run and the other three, <em>p</em> &lt; 10<sup>−7</sup>.</p>
+    <p>This is fatal for <code>compare.py</code>. Its Wilcoxon tests pair per-gauge scores from <em>single training runs</em>, so the dominant variance component — run-to-run noise — is not in the model at all. Every significance claim it produces is a test of training seed, not of architecture. <strong>Nothing can be concluded from a two-run comparison here; three or more seeds per arm are the minimum.</strong></p>
+  </div>
+
+  <div class="finding major">
+    <div class="fhead"><span class="fid">F3</span><span class="ftitle">Most of the test set has no graph to speak of, and the graph hurts where there is one</span><span class="tag major">Major</span></div>
+    <p>Measured from the gauges' own GRDC catchment areas and the upstream node counts recorded during evaluation:</p>
+    <div class="ev">
+      <span class="evlab">Graph size across the 161 held-out gauges</span>
+      upstream nodes . . . . . p10 <b>1</b> &nbsp; median <b>7</b> &nbsp; p90 <b>62</b> &nbsp; max <b>730</b><br>
+      km² per graph node . . . p10 <b>1,418</b> &nbsp; median <b>2,430</b> &nbsp; p90 <b>6,047</b><br>
+      single-node “graphs” . . <b class="bad">31.2 % of gauges</b> (median catchment 4,173 km²)<br>
+      ≤ 3 nodes . . . . . . . . <b>35.6 %</b> &nbsp;&nbsp; ≤ 7 nodes . . <b>51.9 %</b>
+    </div>
+    <p>For a third of the test set the “graph model” and the lumped model are, by construction, the same computation. For the median gauge the graph offers a 7-fold refinement over a single lumped node — against RiverMamba's ~100×.</p>
+    <p>And where the graph is largest, the graph model does <em>worse</em>:</p>
+    <div class="ev">
+      <span class="evlab">Skill by catchment-size quartile (STGNN vs FloodHub)</span>
+      &lt; 5,989 km² &nbsp; (1 node) . . . . F1@2yr <b>0.177</b> vs <b>0.191</b><br>
+      5,989–17,530 &nbsp;(5 nodes) . . . . F1@2yr <b>0.217</b> vs <b>0.217</b><br>
+      17,530–47,698 (9 nodes) . . . . F1@2yr <b>0.252</b> vs <b>0.242</b><br>
+      &gt; 47,698 km² (58 nodes) . . . . F1@2yr <b class="bad">0.295</b> vs <b>0.350</b><br>
+      <br>Spearman(nodes, &Delta;F1@2yr) = <b class="bad">−0.183</b>, <em>p</em> = 0.021
+    </div>
+    <p>The trend runs the wrong way and is significant. Since the graph provably has no effect on the output, this is the extra parameters and the shared CMAL head absorbing capacity, not a spatial failure — but it is the opposite of the hypothesis in every stratum where the hypothesis was supposed to bite.</p>
+  </div>
+</section>
+
+<section>
+  <div class="snum">04 — The divergence</div>
+  <h2>Why test loss rises while every test metric improves</h2>
+  <div class="col">
+    <p>This is the behaviour that has been read as overfitting. It is not, and acting on it would have cost roughly half the flood skill.</p>
+    <p>Start with the mechanical half. <strong>“Test Loss” in the logs is a single batch</strong>, drawn one at a time from a cycling iterator; <strong>Test NSE and Test F1 are 20-batch rolling buffers</strong> maintained inside the metric objects. Lag-1 autocorrelation is 0.27 for the loss against 0.90–0.95 for the metrics. They are not comparable estimators of anything, and the loss curve carries roughly twenty times the sampling noise.</p>
+    <p>The substantive half is more interesting. In all three architectures examined, the test NLL reaches its minimum between <strong>16 % and 30 %</strong> of the run and rises monotonically thereafter — while the point-prediction error on the very same test batches falls monotonically to the last step.</p>
+  </div>
+
+  <figure>
+    <div class="figtitle">Test loss turns at step 9,294; flood skill keeps climbing to step 36,000</div>
+    <div class="figsub">FloodHub, mixtures = 1 · run eternal-silence-80 · values are medians within each decile of training</div>
+    <div class="legend">
+      <span class="key"><span class="dot" style="background:var(--stage)"></span>Test NLL — the training objective</span>
+      <span class="key"><span class="dot" style="background:var(--accent)"></span>Test F1 @ 2-yr</span>
+      <span class="key"><span class="dot" style="background:#2E8FA8"></span>Test F1 @ 5-yr</span>
+      <span class="key">both panels: <b style="color:var(--ink-2)">up = better</b></span>
+    </div>
+    <svg viewBox="0 0 760 400" role="img" aria-label="Two stacked panels sharing an optimizer-step axis. The upper panel shows test negative log likelihood improving until step 9000 and then degrading for the rest of training. The lower panel shows test flood F1 at two-year and five-year return periods rising continuously to the end of training.">
+      <!-- ============ PANEL A : test NLL, inverted so up = better ============ -->
+      <text x="66" y="20" font-family="Zilla Slab, Georgia, serif" font-size="13.5" font-weight="600" fill="var(--ink)">Objective on held-out gauges &#183; negative log likelihood</text>
+      <g stroke="var(--rule)" stroke-width="1">
+        <line x1="66" y1="34" x2="694" y2="34"/><line x1="66" y1="77" x2="694" y2="77"/>
+        <line x1="66" y1="121" x2="694" y2="121"/><line x1="66" y1="164" x2="694" y2="164"/>
+      </g>
+      <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="end">
+        <text x="58" y="38">&#8722;4.6</text><text x="58" y="81">&#8722;3.6</text>
+        <text x="58" y="125">&#8722;2.6</text><text x="58" y="168">&#8722;1.6</text>
+      </g>
+      <line x1="212" y1="30" x2="212" y2="168" stroke="var(--stage)" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>
+      <text x="220" y="150" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--stage)">best test NLL &#183; step 9,294</text>
+      <path d="M212,57.1 L674,89.9 L674,168 L212,168 Z" fill="var(--stage)" opacity="0.07"/>
+      <polyline fill="none" stroke="var(--stage)" stroke-width="2.4"
+        points="80,156.8 146,71.5 212,57.1 278,65.9 344,68.2 410,74.9 476,78.7 542,73.1 608,82.5 674,89.9"/>
+      <g fill="var(--stage)">
+        <circle cx="80" cy="156.8" r="3.2"/><circle cx="146" cy="71.5" r="3.2"/><circle cx="212" cy="57.1" r="4.6"/>
+        <circle cx="278" cy="65.9" r="3.2"/><circle cx="344" cy="68.2" r="3.2"/><circle cx="410" cy="74.9" r="3.2"/>
+        <circle cx="476" cy="78.7" r="3.2"/><circle cx="542" cy="73.1" r="3.2"/><circle cx="608" cy="82.5" r="3.2"/>
+        <circle cx="674" cy="89.9" r="3.2"/>
+      </g>
+      <text x="686" y="113" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--stage)" text-anchor="end">+0.59 nats worse</text>
+      <line x1="66" y1="30" x2="66" y2="168" stroke="var(--rule-2)" stroke-width="1"/>
+
+      <!-- ============ PANEL B : flood F1 ============ -->
+      <text x="66" y="210" font-family="Zilla Slab, Georgia, serif" font-size="13.5" font-weight="600" fill="var(--ink)">Flood detection on the same held-out gauges &#183; F1</text>
+      <g stroke="var(--rule)" stroke-width="1">
+        <line x1="66" y1="224" x2="694" y2="224"/><line x1="66" y1="256.5" x2="694" y2="256.5"/>
+        <line x1="66" y1="289" x2="694" y2="289"/><line x1="66" y1="321.5" x2="694" y2="321.5"/>
+        <line x1="66" y1="354" x2="694" y2="354"/>
+      </g>
+      <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="end">
+        <text x="58" y="228">0.36</text><text x="58" y="260">0.27</text>
+        <text x="58" y="293">0.18</text><text x="58" y="325">0.09</text><text x="58" y="358">0.00</text>
+      </g>
+      <line x1="212" y1="220" x2="212" y2="354" stroke="var(--stage)" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>
+      <polyline fill="none" stroke="var(--accent)" stroke-width="2.4"
+        points="80,291.3 146,279.7 212,270.8 278,261.1 344,258.0 410,250.7 476,245.0 542,237.2 608,234.5 674,229.3"/>
+      <g fill="var(--accent)">
+        <circle cx="80" cy="291.3" r="3.2"/><circle cx="146" cy="279.7" r="3.2"/><circle cx="212" cy="270.8" r="4.6"/>
+        <circle cx="278" cy="261.1" r="3.2"/><circle cx="344" cy="258.0" r="3.2"/><circle cx="410" cy="250.7" r="3.2"/>
+        <circle cx="476" cy="245.0" r="3.2"/><circle cx="542" cy="237.2" r="3.2"/><circle cx="608" cy="234.5" r="3.2"/>
+        <circle cx="674" cy="229.3" r="3.2"/>
+      </g>
+      <polyline fill="none" stroke="#2E8FA8" stroke-width="2.2" stroke-dasharray="6 3"
+        points="80,334.3 146,321.3 212,319.4 278,315.6 344,312.9 410,308.0 476,301.1 542,298.4 608,289.1 674,287.9"/>
+      <g fill="#2E8FA8">
+        <circle cx="212" cy="319.4" r="4.0"/><circle cx="674" cy="287.9" r="3.0"/>
+      </g>
+      <text x="686" y="226" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--accent)" text-anchor="end">+47%</text>
+      <text x="686" y="284" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="#2E8FA8" text-anchor="end">+87%</text>
+      <line x1="66" y1="220" x2="66" y2="354" stroke="var(--rule-2)" stroke-width="1"/>
+      <line x1="66" y1="354" x2="694" y2="354" stroke="var(--rule-2)" stroke-width="1"/>
+      <g font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--muted)" text-anchor="middle">
+        <text x="80" y="372">3.6k</text><text x="212" y="372">10.8k</text><text x="344" y="372">17.9k</text>
+        <text x="476" y="372">25.3k</text><text x="608" y="372">32.3k</text><text x="674" y="372">36k</text>
+        <text x="380" y="392" font-size="11">optimizer step</text>
+      </g>
+    </svg>
+    <figcaption>From the loss minimum to the end of training, test NLL rises <b>+0.59 nats</b> at the median while test flood F1@2yr rises <b>+47 %</b> (0.230 → 0.338), F1@5yr <b>+87 %</b> (0.097 → 0.181), NSE <b>+14 %</b>, and NMAE — the actual point error, in real discharge units — <b>falls 9.7 %</b>. The same pattern holds for Combo ChebBlock5 (loss minimum at 16 %, F1@5yr +92 %) and HierarchicalSAGE (17 %, +65 %).</figcaption>
+  </figure>
+
+  <div class="finding blocking">
+    <div class="fhead"><span class="fid">F4</span><span class="ftitle">The rising test NLL is a calibration artifact, not degrading prediction</span><span class="tag blocking">Blocking</span></div>
+    <p>The CMAL loss for one asymmetric-Laplacian component is</p>
+    <div class="ev">−log <em>p</em> = log <em>b</em> − log &tau;(1−&tau;) + max(&tau;e, (&tau;−1)e) / <em>b</em> &nbsp;&nbsp;&nbsp; where <em>e</em> = y − &mu;</div>
+    <p>Two terms can raise it. The sharpness term <code>log b</code> is <strong>additive and homoscedastic</strong> — if the model simply became uniformly overconfident, it would shift every quantile of the loss by the same amount. The residual term <code>|e|/b</code> is not: it explodes precisely on the days where the model is confidently wrong. So the quantile profile of the increase identifies the mechanism.</p>
+    <div class="tw">
+      <table>
+        <caption>Change in test NLL from the loss minimum to the end of training, by quantile</caption>
+        <thead><tr><th>Quantile of test NLL</th><th>q10</th><th>q25</th><th>q50</th><th>q75</th><th>q90</th><th>q95</th><th>q99</th></tr></thead>
+        <tbody>
+          <tr><td>FloodHub (mix = 1)</td><td>+0.20</td><td>+0.42</td><td>+0.59</td><td>+0.83</td><td>+1.20</td><td>+1.43</td><td class="neg">+1.70</td></tr>
+          <tr><td>Combo ChebBlock5</td><td>+0.28</td><td>+0.50</td><td>+0.69</td><td>+1.07</td><td>+1.65</td><td>+1.82</td><td class="neg">+2.34</td></tr>
+          <tr><td>HierarchicalSAGE</td><td>+0.15</td><td>+0.35</td><td>+0.52</td><td>+0.67</td><td>+1.56</td><td>+4.72</td><td class="neg">+7.60</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="tnote">Every run shows the increase concentrated monotonically in the upper tail — from +0.15…+0.28 at q10 to +1.70…+7.60 at q99.</p>
+    <p>The increase is <em>not</em> uniform across quantiles, so it is not the sharpness term. It is the residual term, on the rare batches containing extreme events. Combined with the fact that <strong>test NMAE falls throughout</strong>, the diagnosis is unambiguous: <strong>the model's predictive <em>uncertainty</em> becomes miscalibrated on unseen gauges while its predictive <em>location</em> keeps improving</strong>. The heteroscedastic scale <em>b</em> is learned from the 644 training gauges and does not transfer; the mean does.</p>
+    <div class="callout">
+      <div class="clab">Consequence</div>
+      <p>Test NLL is not a valid model-selection or early-stopping signal for this problem. Stopping at its minimum would have shipped a model with F1@2yr = 0.230 instead of 0.338 and F1@5yr = 0.097 instead of 0.181. The <code>EarlyStop</code> class is instantiated in <code>train.py</code> and never called — which, given the above, was fortunate. <strong>Select on flood F1 and NSE; log NLL for diagnosis only, and log it as an epoch-level average rather than a single batch.</strong></p>
+    </div>
+  </div>
+
+  <div class="finding minor">
+    <div class="fhead"><span class="fid">F5</span><span class="ftitle">Only ~11 % of the available supervision is used</span><span class="tag minor">Design</span></div>
+    <p><code>loss = objective(forecast, future)</code>. The hindcast head's output is computed and thrown away. The optimizer state confirms it: <code>floodEncoder.riverProjection</code> and <code>gnnEncoder.riverProjection</code> — 104 tensors each — received no gradient in any run.</p>
+    <p>With <code>history = 60</code> and <code>future = 7</code>, each sample carries 67 supervised discharge targets and the loss uses 7. Google supervises both the hindcast and forecast heads. Turning this on costs no additional forward compute and roughly <strong>9× the gradient signal per sample</strong> — likely the single cheapest improvement available.</p>
+  </div>
+</section>
+
+<section>
+  <div class="snum">05 — The real ceiling</div>
+  <h2>Every model has converged to the shrinkage that maximises NSE and destroys flood recall</h2>
+  <div class="col">
+    <p>For any predictor with correlation <em>r</em> against the observations, the variance ratio &alpha; = &sigma;<sub>pred</sub>/&sigma;<sub>obs</sub> that <strong>maximises NSE and minimises MSE is exactly &alpha;* = r</strong>. Where did training land?</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <caption>Observed dispersion against the MSE-optimal dispersion, all eight runs</caption>
+      <thead><tr><th>Run</th><th>Median r</th><th>Median &alpha;</th><th>&alpha; / r</th><th>Median NSE</th><th>Mean F1 @ 2 yr</th></tr></thead>
+      <tbody>
+        <tr><td>2026-01-20 FloodHub</td><td>0.742</td><td>0.736</td><td>0.992</td><td>0.468</td><td>0.174</td></tr>
+        <tr><td>2026-01-23 Combo</td><td>0.756</td><td>0.707</td><td>0.936</td><td>0.489</td><td>0.154</td></tr>
+        <tr><td>2026-01-24 Combo</td><td>0.751</td><td>0.832</td><td>1.107</td><td>0.478</td><td>0.213</td></tr>
+        <tr><td>2026-01-24 FloodHub</td><td>0.730</td><td>0.779</td><td>1.068</td><td>0.431</td><td>0.156</td></tr>
+        <tr><td>2026-01-25 Combo</td><td>0.749</td><td>0.717</td><td>0.957</td><td>0.464</td><td>0.134</td></tr>
+        <tr><td>2026-01-25 FloodHub</td><td>0.733</td><td>0.732</td><td>0.998</td><td>0.420</td><td>0.142</td></tr>
+        <tr class="hl"><td>2026-01-26 FloodHub</td><td>0.796</td><td>0.806</td><td>1.014</td><td>0.542</td><td>0.250</td></tr>
+        <tr class="hl"><td>2026-01-28 Combo</td><td>0.784</td><td>0.801</td><td>1.022</td><td>0.551</td><td>0.235</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="tnote">&alpha;/r sits in [0.94, 1.11] with a median of 1.01 across four architectures and every training length. Per gauge, median &alpha; − r = +0.025 (Wilcoxon <em>p</em> = 0.0014) — a small positive offset consistent with the CMAL objective being median-seeking rather than mean-seeking.</p>
+
+  <figure>
+    <div class="figtitle">Flood skill is a function of dispersion, not of architecture</div>
+    <div class="figsub">One point per completed test evaluation · 160 held-out gauges each</div>
+    <div class="legend">
+      <span class="key"><span class="dot" style="background:var(--accent)"></span>FloodHub (lumped LSTM)</span>
+      <span class="key"><span class="dot" style="background:var(--stage)"></span>Combo ChebBlock5 (“STGNN”)</span>
+    </div>
+    <svg viewBox="0 0 760 320" role="img" aria-label="Scatter of median dispersion ratio against mean flood F1 for eight runs, showing a strong positive trend with no separation between architectures">
+      <g stroke="var(--rule)" stroke-width="1">
+        <line x1="88" y1="40" x2="700" y2="40"/><line x1="88" y1="100" x2="700" y2="100"/>
+        <line x1="88" y1="160" x2="700" y2="160"/><line x1="88" y1="220" x2="700" y2="220"/>
+        <line x1="88" y1="260" x2="700" y2="260"/>
+      </g>
+      <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="end">
+        <text x="80" y="44">0.28</text><text x="80" y="104">0.23</text><text x="80" y="164">0.18</text>
+        <text x="80" y="224">0.13</text><text x="80" y="264">0.10</text>
+      </g>
+      <text x="26" y="160" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--muted)" text-anchor="middle" transform="rotate(-90 26 160)">mean F1 @ 2 yr</text>
+      <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)" text-anchor="middle">
+        <text x="88" y="282">0.70</text><text x="241" y="282">0.74</text><text x="394" y="282">0.78</text>
+        <text x="547" y="282">0.82</text><text x="700" y="282">0.86</text>
+        <text x="394" y="302" font-size="11">median &#963;(prediction) / &#963;(observation)</text>
+      </g>
+      <!-- trend line: F1 ~ 0.86*alpha - 0.48  => at a=0.70 F1=0.122 ; a=0.85 F1=0.251 -->
+      <line x1="88" y1="220.4" x2="688" y2="71.0" stroke="var(--ink-2)" stroke-width="1.4" stroke-dasharray="6 4" opacity="0.55"/>
+      <text x="694" y="238" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-2)" text-anchor="end">Pearson r = +0.82 (F1)</text>
+      <text x="694" y="254" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-2)" text-anchor="end">+0.91 (recall)</text>
+      <!-- x: 88 + (a-0.70)/0.16*612 ; y: 40 + (0.28-F1)/0.18*220 -->
+      <!-- Combo 0.7075,0.1539 -->
+      <g>
+        <circle cx="117" cy="194.1" r="6.5" fill="var(--stage)" opacity="0.85"/>
+        <circle cx="154" cy="203.0" r="6.5" fill="var(--stage)" opacity="0.85"/>
+        <circle cx="474" cy="94.5" r="6.5" fill="var(--stage)" opacity="0.85"/>
+        <circle cx="594" cy="122.4" r="6.5" fill="var(--stage)" opacity="0.85"/>
+        <circle cx="210" cy="209.3" r="6.5" fill="var(--accent)" opacity="0.85"/>
+        <circle cx="227" cy="169.1" r="6.5" fill="var(--accent)" opacity="0.85"/>
+        <circle cx="391" cy="192.0" r="6.5" fill="var(--accent)" opacity="0.85"/>
+        <circle cx="495" cy="76.8" r="6.5" fill="var(--accent)" opacity="0.85"/>
+      </g>
+      <line x1="88" y1="30" x2="88" y2="266" stroke="var(--rule-2)" stroke-width="1"/>
+      <line x1="88" y1="266" x2="700" y2="266" stroke="var(--rule-2)" stroke-width="1"/>
+    </svg>
+    <figcaption>Across all eight runs, the median dispersion ratio explains <b>83 % of the variance in flood recall</b> (Pearson <i>r</i> = +0.913) and 67 % in F1@2yr (+0.817). Architecture explains none of it — the two families interleave completely along the trend. Precision is almost independent of dispersion (<i>r</i> = +0.23), so the entire effect runs through recall.</figcaption>
+  </figure>
+
+  <div class="finding blocking">
+    <div class="fhead"><span class="fid">F6</span><span class="ftitle">The objective and the flood metric want opposite things, and the objective is winning</span><span class="tag blocking">Blocking</span></div>
+    <p>The models are not undertrained and not badly architected. They are correctly optimised for a squared-error-shaped target, and squared error is maximised by shrinking predictions toward the conditional mean. Then the evaluation asks whether that shrunk prediction crosses a flood threshold, and it does not.</p>
+    <p>The exchange rate is extremely favourable. Because NSE(&alpha;) = 2&alpha;r − &alpha;² − bias² is <em>flat</em> near its optimum:</p>
+    <div class="ev">
+      <span class="evlab">Cost of un-shrinking the FloodHub run (median r = 0.796)</span>
+      &alpha; = 0.79 (optimum) . . . NSE = +0.633<br>
+      &alpha; = 0.90 . . . . . . . . NSE = +0.622 &nbsp;(−0.011)<br>
+      &alpha; = 1.00 (unbiased) . . . NSE = +0.591 &nbsp;<b>(−0.042)</b>
+    </div>
+    <p>Giving up <strong>0.042 NSE</strong> buys back the full dynamic range. A Monte-Carlo estimate calibrated gauge-by-gauge to the real per-gauge means, standard deviations, correlations and event base rates puts the gain at <strong>+26 % F1 at 2-yr, +36 % at 5-yr, +40 % at 10-yr</strong> — and it lands within 2–4 % of the F1-optimal decision threshold, so there is little left on the table beyond it.</p>
+    <p>The change does not require retraining. It is a decision-rule change: score events against the <em>model's own</em> return-period thresholds, computed from the model's own simulated hydrograph, exactly as the <em>Nature</em> paper specifies. That correction is scale-invariant and absorbs the shrinkage automatically.</p>
+  </div>
+</section>
+
+<section>
+  <div class="snum">06 — Measurement</div>
+  <h2>Six defects in the evaluation, and what each one does to the number</h2>
+
+  <div class="finding blocking">
+    <div class="fhead"><span class="fid">F7</span><span class="ftitle">The “1-year flood” threshold is a low-flow quantile</span><span class="tag blocking">Blocking</span></div>
+    <p>In <code>calculateReturnPeriods</code>, <code>nonExceedanceProbability = max(1 - 1/period, 0.01)</code>. For <code>period = 1</code> this evaluates to <code>max(0, 0.01) = 0.01</code> — the <strong>1st percentile</strong> of the fitted log-Pearson III distribution, not the 100th.</p>
+    <div class="ev">
+      <span class="evlab">Measured on 238 real GRDC series and on the 161-gauge test set</span>
+      fraction of days exceeding the “1-year” threshold . . <b class="bad">37.4 % (median gauge) · 51.9 % (test set)</b><br>
+      fraction of days exceeding the “2-year” threshold . . <b>0.96 %</b><br>
+      fraction of days exceeding the “5-year” threshold . . <b>0.23 %</b><br>
+      fraction of days exceeding the “10-year” threshold . . <b>0.09 %</b>
+    </div>
+    <p>“1 Year Flood F1 = 0.82” is measuring whether the model can tell above-typical flow from below-typical flow. It is reported in <code>train.py</code>, in the wandb dashboards, and as one of the four Wilcoxon tests in <code>compare.py</code>. It should be deleted, and the series should start at 2 years.</p>
+  </div>
+
+  <div class="finding major">
+    <div class="fhead"><span class="fid">F8</span><span class="ftitle">Events are scored per day, without the ±2-day tolerance the protocol requires</span><span class="tag major">Major</span></div>
+    <p>A true 2-year event occupies 1/(2·365) = 0.137 % of days. The measured exceedance rate is <strong>0.96 %</strong> — about <strong>seven flood-days per flood-event</strong>, because floods last several days. <code>test.ipynb</code> compares prediction and observation independently at each (sample, lead-time) pair.</p>
+    <p>Two things follow. Each event is counted roughly seven times, so the per-gauge F1 is really a duration-weighted score dominated by long snowmelt recessions rather than by peaks. And a one-day timing error converts a correct forecast into <em>both</em> a false positive and a false negative. Google's ±2-day crossing window exists precisely to remove that penalty; it is absent here, and it depresses the reported F1 for both models.</p>
+  </div>
+
+  <div class="finding major">
+    <div class="fhead"><span class="fid">F9</span><span class="ftitle">Every reported KGE is computed from swapped variables</span><span class="tag major">Major</span></div>
+    <div class="ev">
+      <span class="evlab">test.ipynb, metrics dictionary initialisation</span>
+      "targetDev":  targets.mean[n],   <span class="bad">&larr; holds the mean</span><br>
+      "targetMean": targets.deviation[n]   <span class="bad">&larr; holds the deviation</span>
+    </div>
+    <p><code>compare.py</code> then computes &alpha; = predMean/targetMean and &beta; = √predDev/targetDev against the swapped fields. Recomputing correctly on the same files:</p>
+    <div class="ev">
+      <span class="evlab">Median KGE, 161 held-out gauges</span>
+      STGNN . . . . as reported <b class="bad">0.403</b> &nbsp;&rarr;&nbsp; corrected <b>0.605</b><br>
+      FloodHub . . as reported <b class="bad">0.385</b> &nbsp;&rarr;&nbsp; corrected <b>0.597</b><br>
+      difference . . Wilcoxon <em>p</em> = 0.888 &nbsp; (78/161 gauges favour STGNN)
+    </div>
+    <p>The <code>CMALKGE</code> class used during training is separately broken — <code>torch.mean(yPred, dim=1) / means</code> broadcasts a <code>(B,)</code> against a <code>(B,1)</code> into a <code>(B,B)</code> outer product. It is not in the logged metric set, so no published number depends on it, but it will silently produce nonsense if enabled.</p>
+  </div>
+
+  <div class="finding major">
+    <div class="fhead"><span class="fid">F10</span><span class="ftitle">There is no temporal holdout, and test-gauge observations leak into the protocol</span><span class="tag major">Major</span></div>
+    <p><code>InundationData.split</code> partitions by gauge and nothing else. Train and test gauges both span the full 1980–2023 record, over the same continent and the same weather. The <em>Nature</em> protocol excludes training data within one year — the encoder's sequence length — of any test data. Nested North American gauges make this worse: a test gauge downstream of a training gauge shares most of its upstream ERA5 nodes and nearly its hydrograph.</p>
+    <p>Three further quantities are derived from the test gauges' own observations and handed to the evaluation: the return-period <strong>thresholds</strong>, the per-gauge <strong>mean</strong> used as the NSE denominator, and the per-gauge <strong>deviation</strong>. The global target normalisation in <code>streamflowProcess</code> is also fit on all gauges including the test set. A genuinely ungauged basin supplies none of these. <strong>The reported numbers are not ungauged-basin numbers.</strong></p>
+  </div>
+
+  <div class="finding minor">
+    <div class="fhead"><span class="fid">F11</span><span class="ftitle">The point estimator is the most shrunk one available, computed the most expensive way</span><span class="tag minor">Design</span></div>
+    <p>Both <code>train.py</code> and <code>test.ipynb</code> use <code>torch.mean(CMAL.sample(*forecast, 10000), dim=-1)</code> — a 10,000-sample Monte-Carlo estimate of the mixture <em>mean</em>. The mean is the estimator that shrinks most under a heavy-tailed predictive density, which is exactly the wrong choice for threshold crossing.</p>
+    <p>The closed forms exist and the repository's versions of them are wrong:</p>
+    <div class="ev">
+      <span class="evlab">Validated against 40,000 Monte-Carlo draws</span>
+      repo <code>CMAL.mean()</code> . . . . . median |rel. err| <b class="bad">10.14</b> &nbsp; corr <b class="bad">0.454</b><br>
+      &mu; + b(1−2&tau;)/(&tau;(1−&tau;)) . . . median |rel. err| <b>0.0085</b> &nbsp; corr <b>0.99996</b><br>
+      repo <code>CMAL.median()</code> . . . median |rel. err| <b class="bad">8.03</b> &nbsp; corr <b class="bad">0.418</b><br>
+      <br>cost: MC estimate <b>549 ms</b> vs closed form <b>0.11 ms</b> per call &nbsp;<b>(4,836×)</b>
+    </div>
+    <p><code>CMAL.median</code>'s <code>t &gt; 1</code> branch is dead code — &tau; is squashed into (0,1) by a sigmoid in <code>forward</code>, so zero elements ever reach it. Neither function is on the path that produced the published metrics, but they are why the expensive Monte-Carlo path exists.</p>
+  </div>
+
+  <div class="finding minor">
+    <div class="fhead"><span class="fid">F12</span><span class="ftitle">NSE is reported pooled, and its denominator is built on the wrong area</span><span class="tag minor">Minor</span></div>
+    <p>The training-time <code>CMALNSE</code> computes a single pooled ratio over its 20-batch buffer, despite the comment reading <em>“NSE per gauge”</em>; a pooled NSE is dominated by the highest-variance gauges. (The final <code>test.ipynb</code> evaluation does accumulate per gauge, correctly.)</p>
+    <p>Separately, targets are normalised by <code>grdc["Catchment"]</code> (the GRDC-reported area) in <code>__getitem__</code>, but the per-gauge mean and deviation — and the global <code>transform</code> — are computed on <code>Stage / calculatedArea</code> (the summed BasinATLAS upstream area). The <code>excludeDiffBasins</code> filter bounds the disagreement at 20 %, so the NSE denominator is inflated by at most ~3 %. Small, systematic, and always in the flattering direction.</p>
+  </div>
+</section>
+
+<section>
+  <div class="snum">07 — Modelling and data</div>
+  <h2>What is actually limiting skill</h2>
+
+  <div class="col">
+    <p>Against the baselines the project never measured, on the same 148 held-out gauges and the same period:</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <caption>Nash–Sutcliffe efficiency against reference predictors · 148 held-out gauges · 1980–2023</caption>
+      <thead><tr><th>Predictor</th><th>Median NSE</th><th>Fraction &gt; 0</th><th>Fraction &gt; 0.5</th></tr></thead>
+      <tbody>
+        <tr><td>Constant per-gauge mean</td><td>0.000</td><td>0.000</td><td>0.000</td></tr>
+        <tr><td>Day-of-year climatology (in-sample, 31-day smoothed)</td><td>0.219</td><td>1.000</td><td>0.230</td></tr>
+        <tr><td>7-day persistence <em>(uses observed discharge; the models do not)</em></td><td>0.423</td><td>0.736</td><td>0.412</td></tr>
+        <tr class="hl"><td>FloodHub baseline (this repository)</td><td>0.530</td><td>0.885</td><td>0.541</td></tr>
+        <tr class="hl"><td>Combo ChebBlock5 “STGNN”</td><td>0.546</td><td>0.885</td><td>0.554</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="tnote">The deep models beat a seasonal climatology by a median of +0.18 to +0.20 NSE, and lose to it outright on 20–26 % of gauges. They beat 7-day persistence — which needs no weather input at all — by +0.11. This is real but modest skill, obtained without a temporal holdout.</p>
+
+  <div class="finding blocking">
+    <div class="fhead"><span class="fid">F13</span><span class="ftitle">A 60-day hindcast cannot represent snowmelt, the dominant flood mechanism in the domain</span><span class="tag blocking">Blocking</span></div>
+    <p>Every config in the repository sets <code>history: 60</code>. Google uses 365, and states the reason: the encoder must see a full annual cycle. Across North America and the Arctic — the two HYBAS regions this dataset covers — the dominant flood-generating process is spring snowmelt, whose driver (accumulated winter snowpack) builds over three to five months. <strong>A 60-day window cannot see it.</strong> The model can only respond to snowmelt once melt is already underway, which is a large part of why the predictive distribution is too narrow at the peaks.</p>
+    <p>This is the largest single modelling defect after the wiring bug, and it costs only sequence length to fix.</p>
+  </div>
+
+  <div class="finding major">
+    <div class="fhead"><span class="fid">F14</span><span class="ftitle">The constraint is catchment diversity, not epochs</span><span class="tag major">Major</span></div>
+    <div class="ev">
+      <span class="evlab">Training scale accounting</span>
+      usable gauges . . . . <b>~805</b> (644 train / 161 test) &nbsp; from <b>2,544</b> available GRDC series<br>
+      train sample-days . . <b>~8,392,860</b><br>
+      FloodHub, 36,000 &times; 256 . <b>9.2 M samples = 1.10 epochs</b><br>
+      HierarchicalSAGE, 47,384 steps . <b>15.2 M samples = 1.82 epochs</b><br>
+      <br>Google Flood Hub: 50,000 &times; 256 = 12.8 M samples over 5,680 gauges = <b>≈0.15 epochs</b>
+    </div>
+    <p>The concern about training only ~2 epochs is inverted. <strong>This project already trains for roughly 7× more passes over its data than Google does</strong> — over one seventh the gauges. And “epochs” overstates it: with a 60-day window, consecutive samples share 59/60 of their input, and daily discharge decorrelates in 10–30 days. The effective independent sample count is closer to 644 × ~800 ≈ <strong>5 × 10⁵</strong>, so 36,000 steps at batch 256 is on the order of <strong>18 effective epochs</strong>.</p>
+    <p>That is consistent with what the curves show: <strong>test NSE plateaus at ≈0.55 by 20–30k steps in every run</strong> (final-quarter slope +0.005/10k for Combo, −0.011 for FloodHub). More iterations over 644 catchments add correlated samples, not hydrological diversity. Expanding the gauge set — GRDC-Caravan alone offers 5,356 catchments with matching ERA5-Land forcings and HydroATLAS attributes — is the highest-leverage change available for a genuine ungauged-basin claim.</p>
+    <p>One caveat cuts the other way, and it is worth acting on: <strong>flood F1 has <em>not</em> plateaued</strong>. Final-quarter slopes are +0.010/10k steps (Combo) and <strong>+0.024/10k steps (HierarchicalSAGE at 47k)</strong>. NSE saturates early; flood detection does not. Training the current SAGE model twice as long is a cheap, well-supported bet.</p>
+  </div>
+
+  <div class="finding major">
+    <div class="fhead"><span class="fid">F15</span><span class="ftitle">The target transform is a live, high-leverage knob that has never been tuned deliberately</span><span class="tag major">Major</span></div>
+    <p><code>streamflowProcess</code> is a global z-score on raw specific discharge, with the <code>log10</code> line commented out. Measured on 245 real GRDC series:</p>
+    <div class="ev">
+      <span class="evlab">Pooled specific discharge q = Q/A, exactly what the transform standardises</span>
+      skew <b>+6.6</b> &nbsp; max <b>+74.4&sigma;</b><br>
+      the entire lower half of every daily record occupies <b>0.19&sigma;</b><br>
+      per-gauge mean q spans <b class="bad">1,368&times;</b> across gauges<br>
+      2-yr thresholds land anywhere from <b>−0.30&sigma;</b> to <b>+16.0&sigma;</b>; 10-yr up to <b>+31.2&sigma;</b><br>
+      for the median gauge, the <b>whole hydrograph spans 0.47&sigma;</b> of the loss's units<br>
+      <br>with log10 first: skew <b>−1.74</b>, max <b>+2.68&sigma;</b>, 2-yr thresholds at <b>+1.18&sigma;</b> median
+    </div>
+    <p>The loss is numerically dominated by a handful of wet gauges and extreme days, which is a direct cause of the gradient noise and of the shrinkage in F6.</p>
+    <p>There is a natural experiment in the repository's history. Commit <code>136c103</code> switched from log10 to linear; because F1 and NSE are both computed in real units, the eras are directly comparable. Across 15 runs, the linear era scores <strong>median NSE 0.554 vs 0.257</strong> and <strong>F1@2yr 0.257 vs 0.164</strong>. That comparison is confounded — the architecture family changed in the same commit — but it is informative in the direction it points: linear concentrates gradient on high flows, which is what the flood metric rewards.</p>
+    <p><strong>Neither is the right answer.</strong> The 1,368× cross-gauge scale spread and the flood-tail compression are separable problems. The standard fix is per-basin scaling — Kratzert's basin-averaged NSE loss divides each gauge's squared error by that gauge's own observed variance — which removes the cross-gauge spread while leaving the within-gauge tail intact. It has never been tried here.</p>
+  </div>
+
+  <div class="grid2">
+    <div class="stack">
+      <h4>Input design</h4>
+      <ul>
+        <li><strong>7 ERA5 variables</strong>, no rolling statistics in the benchmarked runs. Google uses ERA5-Land + IMERG + CPC + HRES.</li>
+        <li><strong>277 continuous + 10 categorical static attributes per node against 7 dynamic ones</strong> — a 40:1 ratio. With 644 training gauges and 287 attributes, the static vector is close to a unique gauge identifier: a direct memorisation channel, and the mechanism behind the widening train–test metric gap.</li>
+        <li>Those attributes include RiverATLAS <code>DIS_AV_CMS</code>, <code>dis_m3_pyr/pmn/pmx</code> and <code>run_mm_cyr</code> — long-term modelled discharge at the gauge's own reach, from WaterGAP, which is itself calibrated against GRDC. The model is handed the target's scale. This needs an explicit ablation.</li>
+        <li>Forecast forcings are <strong>perfect</strong>: <code>defaultNoise</code> returns <code>IdentityNoise</code>. The alternative, <code>RampNoise</code>, adds <code>rand_like(data) &times; k</code> — uniform on [0,1), a positive-mean bias rather than zero-mean noise.</li>
+        <li>18 RiverATLAS columns are silently dropped by <code>dropna(axis=1)</code> (276 configured, 258 reaching the model).</li>
+      </ul>
+    </div>
+    <div class="stack">
+      <h4>Data pipeline</h4>
+      <ul>
+        <li><strong>68 % attrition</strong>: 2,544 GRDC series reduce to ~805 usable gauges. 13 % fail the NaN filter; the rest are lost to the 20 % area-mismatch filter and the outside-North-America upstream check. At level 7 a 20 % area tolerance is punishing for small catchments — which is why 31 % of survivors have a single-node graph.</li>
+        <li><strong>Cubic-spline gap filling</strong> over the full record. 31 % of gauges have interior gaps; mean 0.69 % of days fabricated, p90 2.8 %, and six gauges carry gaps over a year (max <strong>4.0 years</strong> of pure spline). Minor in aggregate, but a smooth spline is trivially forecastable and inflates NSE on exactly those gauges. Mask, don't interpolate.</li>
+        <li>In <code>pfafDict</code>, the area-weighted ERA5 accumulation branch is <strong>dead code</strong> — overwritten unconditionally two lines later. Latent: it only bites if <code>downsampling</code> is enabled.</li>
+        <li>The FloodHub baseline is <em>handicapped</em>: it area-averages <em>log</em>-precipitation (a geometric mean, which attenuates extremes) and <code>del past.basinDiscrete</code> strips its categorical attributes. It wins anyway.</li>
+        <li><code>joinGRDCRiverATLAS</code> snaps gauges to the nearest reach with no drainage-area check (the <code>percentDiff</code> line is commented out), so a mis-snapped gauge silently inherits the wrong reach's attributes.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="finding minor">
+    <div class="fhead"><span class="fid">F16</span><span class="ftitle">Most of the training budget is not spent on training</span><span class="tag minor">Cost</span></div>
+    <div class="ev">
+      <span class="evlab">Measured wall-clock</span>
+      dataset construction before step 1 . . <b>3.5–6 h per run</b> (checkpoint timestamp vs. wandb init, 3 runs)<br>
+      FloodHub . . . . . . <b>0.229 s/step</b> &nbsp;(a 2-layer, hidden-256 LSTM at batch 256)<br>
+      Combo ChebBlock5 . . <b>3.061 s/step</b><br>
+      HierarchicalSAGE . . <b>2.307 s/step</b>
+    </div>
+    <p>Per training step, <code>train.py</code> runs a full extra forward pass on a test batch, draws <strong>two</strong> 10,000-sample CMAL Monte-Carlo estimates, calls <code>torch.cuda.empty_cache()</code>, and calls <code>gc.collect()</code> every tenth step. Emptying the caching allocator every iteration forces a device sync and pushes every subsequent allocation through <code>cudaMalloc</code>; it is a well-known throughput pathology. A forward and backward pass of that LSTM should be a few milliseconds.</p>
+    <p>In <code>hierarchical.py</code>, <code>poolEdgeIndex</code> materialises a dense <em>N</em>×<em>N</em> adjacency — at <code>nodesPerBatch = 10000</code> that is a 400 MB tensor, built twice per forward pass, per pooling layer. Fixing these four things plausibly returns 5–20× more gradient steps for the same $100.</p>
+  </div>
+
+  <div class="col">
+    <p>Two smaller notes. The two runs used in <code>compare.py</code> both set <code>head.mixtures: 1</code> — a single asymmetric Laplacian, not a mixture; Klotz et al. found three components optimal. Curiously the 1-component runs are the <em>best</em> performers, while every 12-component run underperforms, which suggests the larger mixture was not optimising rather than that mixtures are unhelpful. And <code>HierarchicalBasinStation</code> reads out with <code>global_mean_pool</code> over all sub-basins — an unweighted average, which is a coarser aggregation than the area-weighted one it was meant to improve on — and never uses the RiverATLAS gauge-reach attributes at all.</p>
+  </div>
+</section>
+
+<section>
+  <div class="snum">08 — What to do</div>
+  <h2>Ranked by expected return per dollar of GPU time</h2>
+
+  <div class="grid2">
+    <div class="stack">
+      <h4>Tier 0 · No retraining. Re-score the checkpoints you already have.</h4>
+      <ul>
+        <li>Delete the 1-year threshold; report 2 / 5 / 10 / 20-year.</li>
+        <li>Adopt the <em>Nature</em> event protocol: each hydrograph crosses <em>its own</em> return-period threshold, matched within ±2 days, counting event crossings rather than exceedance-days. Expected: <strong>+26 % to +40 % F1</strong> from the threshold change alone.</li>
+        <li>Un-swap <code>targetMean</code>/<code>targetDev</code> in <code>test.ipynb</code> and recompute KGE. Median KGE is 0.60, not 0.40.</li>
+        <li>Report a high quantile of the predictive distribution as the alert statistic instead of the mixture mean; use the closed-form mean where a point estimate is needed.</li>
+        <li>Put climatology, day-of-year climatology and persistence in every table. A model that beats seasonal climatology by 0.18 NSE should say so.</li>
+        <li>Report <em>median per-gauge</em> NSE and event counts alongside every F1.</li>
+      </ul>
+    </div>
+    <div class="stack">
+      <h4>Tier 1 · One training run each, high confidence.</h4>
+      <ul>
+        <li>Fix <code>ComboGNNCoder</code> (<code>projected</code> → <code>positional</code>), or retire the Combo family and evaluate <code>HierarchicalSAGE</code>, which is correctly wired and has never been through <code>test.ipynb</code>.</li>
+        <li>Add the hindcast head to the loss. ~9× the supervision per sample, no extra forward compute.</li>
+        <li><code>history</code>: 60 → 365. Required for snowmelt.</li>
+        <li>Add a per-basin variance term to the objective (basin-averaged NSE loss alongside the CMAL NLL).</li>
+        <li>Add a temporal holdout on top of the gauge split and report both numbers.</li>
+        <li>Remove <code>empty_cache()</code>, evaluate the test batch every N steps, use the closed-form mean, and profile the dataset build. Then train past 100k steps — flood F1 is still climbing at +0.024/10k.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout">
+    <div class="clab">Tier 2 · The structural bets</div>
+    <p><strong>Gauges before architecture.</strong> 644 training catchments is the binding constraint on any prediction-in-ungauged-basins claim. GRDC-Caravan supplies 5,356 catchments already paired with ERA5-Land forcings and HydroATLAS attributes, in a standard format. Going from 644 to ~5,000 is a data-engineering task, not a research one, and it is the only change on this list that addresses the thing the project is actually claiming.</p>
+    <p><strong>If the graph stays, move it where the literature says it works.</strong> Level 7 at 2,430 km² per node is too coarse to carry sub-basin heterogeneity; go to level 10–12 (~130 km²), and place the GNN as a <em>routing</em> module over per-subbasin LSTM outputs rather than as the rainfall-runoff model. Weight edges by travel time or area. The README already anticipates the resolution half of this.</p>
+    <p><strong>Then design the experiment.</strong> Three seeds per arm minimum, one changed variable at a time, and an ablation that removes <code>DIS_AV_CMS</code> and the <code>dis_m3_*</code> attributes to measure how much of the current NSE is a static lookup.</p>
+  </div>
+</section>
+
+<footer class="foot">
+  <p><strong>Basis.</strong> Every number above was measured, not estimated: 8 <code>metrics.json</code> test evaluations (161 gauges, 2.1 M sample-days each); 15 wandb training histories pulled from the public project; 15 checkpoint and optimizer state dictionaries; forward/backward tests against the exact code revision <code>1e6eb69</code> used for the published runs; and 281 raw GRDC station files (all 161 test gauges plus 120 sampled others) downloaded from the study's own dataset.</p>
+  <p><strong>Caveats.</strong> The +26–40 % F1 estimate for the threshold change comes from a lognormal-copula simulation calibrated per gauge to the real means, standard deviations, correlations and event base rates; it reproduces the measured F1 to within a factor that makes the <em>relative</em> gain trustworthy and the absolute level optimistic. The log10-vs-linear comparison is confounded by a simultaneous architecture change. GPU-side attribution of the 0.229 s/step figure is inferred from measured wall-clock and known allocator behaviour, not from a profiler trace.</p>
+</footer>
+
+</div>
