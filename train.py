@@ -154,9 +154,12 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
               f"sm_{properties.major}{properties.minor} | bf16 autocast {'on' if useAMP else 'off'} | "
               f"cuDNN {'on' if torch.backends.cudnn.enabled else 'off'} | "
               f"alloc conf {os.environ.get('PYTORCH_CUDA_ALLOC_CONF', '(default)')}")
+        trainWorkers, testWorkers = workerCounts(config, None)
+        print(f"DataLoader workers: {trainWorkers} train + {testWorkers} test. On Windows each one holds its "
+              f"own copy of the dataset in RAM - raise config.numWorkers only if you have the headroom.")
 
     try:
-        train, test = dataClass.split(dataset, config.dataSplit, seed=config.seed, numWorkers=12, fold=fold, folds=folds)
+        train, test = dataClass.split(dataset, config.dataSplit, seed=config.seed, fold=fold, folds=folds)
 
         # batch1 = next(iter(train))
         # dataset.info(batch1)

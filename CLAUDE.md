@@ -127,6 +127,7 @@ All optional, all with defaults that keep existing configs working:
 | `evalEvery` | `10` | steps between metric/test-batch evaluations. |
 | `clipNorm` | `1.0` | gradient-norm clip. `0` disables. |
 | `emptyCacheEvery` | `200` | steps between `torch.cuda.empty_cache()` calls. `0` disables. |
+| `numWorkers` / `testWorkers` | `4` / `min(2, numWorkers)` | DataLoader workers. Was hardcoded to 12 for *both* loaders — 24 spawned processes, each holding its own copy of the dataset in host RAM. See below. |
 | `amp` | bf16 on **sm_80+** only | mixed-precision autocast. Gated on `get_device_properties().major >= 8`, not on `torch.cuda.is_bf16_supported()` — that defaults to `including_emulation=True` and returns True on Turing (GTX 16xx, RTX 20xx), where bf16 is emulated and autocast costs a cast per tensor for no tensor-core gain. |
 
 ### diagnoseGPU.py
@@ -139,6 +140,35 @@ takes hours to answer: the largest batch that fits, whether cuDNN or the
 allocator is what is failing, and whether peak memory drifts across steps (a
 retained reference) or stays flat (fragmentation). `--device cpu` checks that a
 config loads and the shapes line up, without memory numbers.
+
+### "CUDA out of memory" that is actually host RAM
+
+A run died at ~285 steps twice with `CUDA error: out of memory`, then once with
+`CUDNN_STATUS_INTERNAL_ERROR`. None of it was GPU memory. From that run's own
+telemetry:
+
+```
+Memory Allocated GB    0.0855 flat   (slope +0.002 MB/step over 288 steps)
+Memory Reserved GB     0.72   flat
+system.gpu.0.memoryAllocated   max 30.6%   (~1.9 of 6.0 GB)
+system.proc.memory.availableMB min 1.08 MB      <-- host RAM exhausted
+system.memory_percent          max 99%
+```
+
+PyTorch was holding 86 MB on a 6 GB card. The machine ran out of *system* RAM,
+and on Windows a CUDA call then fails with "out of memory" because the driver
+cannot get host memory for its staging buffers; cuDNN's RNN workspace request
+fails the same way and reports `CUDNN_STATUS_INTERNAL_ERROR`. Both are host-RAM
+errors wearing CUDA's clothes.
+
+The cause was `numWorkers=12` passed to `split()` for **both** the train and
+test loaders: 24 spawned processes, each unpickling its own copy of a Dataset
+whose `pfafDict` holds every basin's ERA5 tensor. Defaults are now 4 train and
+2 test workers with `persistent_workers=True`, both configurable. The test
+loader is consumed once every `evalEvery` steps, so it does not need many.
+
+If it recurs, look at `system.proc.memory.availableMB` in wandb *before*
+looking at the GPU.
 
 ### CUDA out-of-memory on small cards
 

@@ -29,7 +29,7 @@ from torch_geometric.loader import DataLoader
 from .basinGraph import loadBasinGraph, loadUpstreamStructures
 from .gauges import loadGaugeSeries
 from .joins import ensureJoinedData, era5Scales
-from ..dataset import splitIndices
+from ..dataset import loaderKwargs, splitIndices, workerCounts
 from .sampler import GraphSizeSampler
 from .samples import buildSampleIndex, filterGaugesByUpstreamCoverage
 from .staticFeatures import buildStaticFeatures
@@ -428,7 +428,7 @@ class InundationData(Dataset):
         plt.show()
 
     @staticmethod
-    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=4, display=False, folds=None, fold=None):
+    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=None, display=False, testWorkers=None, folds=None, fold=None):
         torch.manual_seed(seed)
         random.seed(seed)
         np.random.seed(seed)
@@ -441,8 +441,10 @@ class InundationData(Dataset):
         trainSampler = GraphSizeSampler(train, nodesPerBatch=dataset.config.nodesPerBatch, force=False, shuffle=shuffle, display=display)
         testSampler = GraphSizeSampler(test, nodesPerBatch=dataset.config.nodesPerBatch, force=False, shuffle=shuffle, display=display)
 
-        train = DataLoader(train, batch_sampler=trainSampler, num_workers=numWorkers)
-        test = DataLoader(test, batch_sampler=testSampler, num_workers=numWorkers)
+        trainWorkers, testWorkerCount = workerCounts(dataset.config, numWorkers)
+        testWorkerCount = testWorkerCount if testWorkers is None else int(testWorkers)
+        train = DataLoader(train, batch_sampler=trainSampler, **loaderKwargs(trainWorkers))
+        test = DataLoader(test, batch_sampler=testSampler, **loaderKwargs(testWorkerCount))
 
         return train, test
 
@@ -480,7 +482,7 @@ class FloodHubData(InundationData):
         pass
 
     @staticmethod
-    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=4, display=False, folds=None, fold=None):
+    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=None, display=False, testWorkers=None, folds=None, fold=None):
         torch.manual_seed(seed)
         random.seed(seed)
         np.random.seed(seed)
@@ -490,7 +492,9 @@ class FloodHubData(InundationData):
         train = torch.utils.data.Subset(dataset, trainIndex)
         test = torch.utils.data.Subset(dataset, testIndex)
 
-        train = DataLoader(train, batch_size=dataset.config.batchSize, shuffle=shuffle, num_workers=numWorkers)
-        test = DataLoader(test, batch_size=dataset.config.batchSize, shuffle=shuffle, num_workers=numWorkers)
+        trainWorkers, testWorkerCount = workerCounts(dataset.config, numWorkers)
+        testWorkerCount = testWorkerCount if testWorkers is None else int(testWorkers)
+        train = DataLoader(train, batch_size=dataset.config.batchSize, shuffle=shuffle, **loaderKwargs(trainWorkers))
+        test = DataLoader(test, batch_size=dataset.config.batchSize, shuffle=shuffle, **loaderKwargs(testWorkerCount))
 
         return train, test

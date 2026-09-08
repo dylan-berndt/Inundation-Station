@@ -828,7 +828,7 @@ class InundationData(Dataset):
         plt.show()
 
     @staticmethod
-    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=4, folds=None, fold=None):
+    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=None, testWorkers=None, folds=None, fold=None):
         torch.manual_seed(seed)
         random.seed(seed)
         np.random.seed(seed)
@@ -842,8 +842,10 @@ class InundationData(Dataset):
         trainSampler = GraphSizeSampler(train, nodesPerBatch=dataset.config.nodesPerBatch, force=False, shuffle=shuffle)
         testSampler = GraphSizeSampler(test, nodesPerBatch=dataset.config.nodesPerBatch, force=False, shuffle=shuffle)
 
-        train = DataLoader(train, batch_sampler=trainSampler, num_workers=numWorkers)
-        test = DataLoader(test, batch_sampler=testSampler, num_workers=numWorkers)
+        trainWorkers, testWorkerCount = workerCounts(dataset.config, numWorkers)
+        testWorkerCount = testWorkerCount if testWorkers is None else int(testWorkers)
+        train = DataLoader(train, batch_sampler=trainSampler, **loaderKwargs(trainWorkers))
+        test = DataLoader(test, batch_sampler=testSampler, **loaderKwargs(testWorkerCount))
 
         return train, test
 
@@ -897,6 +899,34 @@ def splitIndices(dataset, trainSplit, seed, folds, fold):
           f"{len(trainIndex)} train samples, {len(testIndex)} test samples")
 
     return trainIndex, testIndex, testIDs
+
+
+def workerCounts(config, numWorkers):
+    """(train workers, test workers).
+
+    Windows spawns DataLoader workers, so every worker unpickles its own full
+    copy of the Dataset - and the ERA5 tensors in `pfafDict` are gigabytes. Two
+    loaders at 12 workers each meant 24 copies resident at once, which exhausts
+    host RAM long before it touches the GPU; the failure then surfaces as
+    `CUDA error: out of memory` or `CUDNN_STATUS_INTERNAL_ERROR`, because the
+    driver cannot get host memory for its staging buffers, while the card
+    itself still reports ~70% free.
+
+    The test loader is consumed once every `evalEvery` steps, so it needs a
+    small fraction of the train loader's workers."""
+    if numWorkers is None:
+        numWorkers = config.numWorkers if "numWorkers" in config else 4
+    numWorkers = max(0, int(numWorkers))
+    testWorkers = config.testWorkers if "testWorkers" in config else min(2, numWorkers)
+    return numWorkers, max(0, int(testWorkers))
+
+
+def loaderKwargs(numWorkers):
+    """persistent_workers keeps workers alive across epochs instead of paying
+    the spawn-and-unpickle cost, and the resident memory spike, again."""
+    if numWorkers <= 0:
+        return {"num_workers": 0}
+    return {"num_workers": numWorkers, "persistent_workers": True}
 
 
 class GraphSizeSampler(Sampler):
@@ -1041,7 +1071,7 @@ class FloodHubData(InundationData):
         pass
 
     @staticmethod
-    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=4, folds=None, fold=None):
+    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=None, testWorkers=None, folds=None, fold=None):
         torch.manual_seed(seed)
         random.seed(seed)
         np.random.seed(seed)
@@ -1051,8 +1081,10 @@ class FloodHubData(InundationData):
         train = torch.utils.data.Subset(dataset, trainIndex)
         test = torch.utils.data.Subset(dataset, testIndex)
 
-        train = DataLoader(train, batch_size=dataset.config.batchSize, shuffle=shuffle, num_workers=numWorkers)
-        test = DataLoader(test, batch_size=dataset.config.batchSize, shuffle=shuffle, num_workers=numWorkers)
+        trainWorkers, testWorkerCount = workerCounts(dataset.config, numWorkers)
+        testWorkerCount = testWorkerCount if testWorkers is None else int(testWorkers)
+        train = DataLoader(train, batch_size=dataset.config.batchSize, shuffle=shuffle, **loaderKwargs(trainWorkers))
+        test = DataLoader(test, batch_size=dataset.config.batchSize, shuffle=shuffle, **loaderKwargs(testWorkerCount))
 
         return train, test
 
