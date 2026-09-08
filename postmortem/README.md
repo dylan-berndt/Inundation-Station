@@ -28,6 +28,44 @@ Full write-up with figures: <https://claude.ai/code/artifact/d8cd2de7-7dc6-4d31-
 | F15 | Global z-score on raw specific discharge: skew +6.6, max +74σ, per-gauge means spanning 1,368×, median gauge's whole hydrograph spanning 0.47σ. | major |
 | F16 | 3.5–6 h/run of dataset construction before step 1; 0.229 s/step (FloodHub) vs 3.06 s/step (Combo) with `empty_cache()` every step, a full test forward pass every step, and two 10k-sample MC draws. | cost |
 
+## Update, 2026-09-08 — HierarchicalSAGE
+
+`2026-08-14 HierarchicalSAGE` is the first evaluated model whose GNN receives
+gradients. It was trained on the original `utils/data/dataset.py` pipeline, on
+a gauge subset sharing only 41 gauges with the earlier test set.
+
+| # | Finding | Severity |
+|---|---|---|
+| F17 | SAGE beats 7 of the 8 earlier runs on the 39 shared gauges (p ≤ 0.023) and ties the 8th (the best FloodHub run, p = 0.50). In a gauge fixed-effects panel (38 gauges × 9 runs) controlling for dispersion, the SAGE indicator is **+0.050 F1@2yr, p = 0.012** (+0.045 at α≤2; +0.069 in a pooled OLS with basin-size controls). **This supersedes F2's "architecture explains none of it"**, which was true only of models with a dead graph. | revises F2 |
+| F18 | The gain is **not attributable to the graph**: the SAGE × log(nodes) interaction is +0.020, p = 0.18. And six things changed at once — live graph, `rolling: 30` (7→21 dynamic features), `mixtures: 4` vs 1, +32% steps, `nodesPerBatch` vs `batchSize`, different split. `rolling: 30` is the only change with a clear mechanism (it partially remedies F13). One ablation pair settles it. Treatment arm is n = 1. | confound |
+| F20 | `InundationData.split` draws random **indices** into an order-dependent gauge list. Adding or removing one gauge shifts every later gauge by a position, so the same seed reproduces the same indices against a different list. Simulated overlaps: identical list 100%, one gauge removed mid-list 66%, one added at the start 29%, five added/three removed 26%. **Observed between the two real runs: 25%.** No two runs share a test set unless the gauge set is byte-identical, and nothing warns you. Fix: hash the gauge ID instead of drawing an index. | blocking |
+| F19 | The `utils/data/pipeline/` refactor (unrelated to the SAGE run) will crash immediately: `graphs` is keyed by gauge basins only, but `display()` indexes it by every upstream basin, and `train.py:103` calls `dataset.display(grdcID="4127501")` unconditionally. Also: the validation script CLAUDE.md points at is gitignored and was never pushed; cache fingerprints omit the machine timezone while `datetime(...).timestamp()` is TZ-dependent; the new `riverID not in gaugeDict` guard turns a crash into a silent drop. Otherwise the port is faithful — **every finding in this report survives the swap**. | blocking |
+
+### The dispersion–skill curve, measured
+
+1,431 (run, gauge) observations across 9 runs, binned on α = σ_pred/σ_obs:
+
+```
+  alpha bin      n   F1@2yr   recall  precision   medNSE
+  0.00-0.50    199   0.0843   0.0556     0.4031   0.1838
+  0.50-0.65    224   0.1129   0.0807     0.3860   0.4344
+  0.65-0.80    336   0.1648   0.1256     0.4655   0.5750
+  0.80-0.95    296   0.2174   0.1775     0.5025   0.6465   <- NSE optimum
+  0.95-1.10    175   0.3017   0.2952     0.4347   0.6437
+  1.10-1.30    104   0.3558   0.4327     0.3442   0.4216   <- F1 optimum
+  1.30-1.60     42   0.3446   0.5961     0.2650   0.1151
+  1.60+         46   0.2773   0.7966     0.1789  -1.6434
+```
+
+F6 is confirmed and sharpened: the two objectives peak at genuinely different
+operating points. The eight earlier runs all sat at α = 0.71–0.83 (the NSE
+optimum); SAGE is the first to move off it (α = 0.91, α/r = 1.17), taking the
+best flood F1 of the nine runs and giving up ~0.04 median NSE. The earlier
+estimate was conservative — the F1 optimum is at α ≈ 1.2, not 1.0.
+
+Reproduce with `postmortem/14_dispersion_skill_curve.py`,
+`15_sage_gauge_fixed_effects.py`, `16_sage_vs_each_run.py`.
+
 ## Reference numbers
 
 Held-out set: 161 gauges, ~2.1 M evaluated sample-days, same split (seed 1234, `dataSplit` 0.8) in every run.

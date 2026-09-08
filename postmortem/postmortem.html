@@ -595,7 +595,167 @@ figcaption b{color:var(--ink-2);font-weight:600}
 </section>
 
 <section>
-  <div class="snum">06 — Measurement</div>
+  <div class="snum">06 &mdash; Update, 2026-09-08</div>
+  <h2>HierarchicalSAGE: the first model whose graph is connected, and the first real effect</h2>
+  <div class="col">
+    <p>A ninth test evaluation has landed &mdash; <code>2026-08-14 HierarchicalSAGE</code>, whose GNN <em>does</em> receive gradients (112 live graph tensors). It was trained on a different gauge subset, so it shares only <strong>41 gauges</strong> with the earlier test set. That is few, but it is enough for a paired design, and the answer is not the one Section 03 predicted.</p>
+  </div>
+
+  <div class="finding major">
+    <div class="fhead"><span class="fid">F17</span><span class="ftitle">SAGE beats seven of the eight earlier runs, ties the eighth</span><span class="tag major">Revises F2</span></div>
+    <div class="ev">
+      <span class="evlab">Paired on the 39 shared gauges with &ge;20 real 2-yr flood days &middot; mean F1 @ 2 yr</span>
+      2026-01-23 Combo . . . 0.143 &rarr; <b>0.320</b> &nbsp; <b>+0.177</b> &nbsp; p&lt;0.0001 &nbsp; 33/39<br>
+      2026-01-25 Combo . . . 0.127 &rarr; <b>0.320</b> &nbsp; <b>+0.193</b> &nbsp; p&lt;0.0001 &nbsp; 33/39<br>
+      2026-01-25 FloodHub . . 0.159 &rarr; <b>0.320</b> &nbsp; <b>+0.161</b> &nbsp; p&lt;0.0001 &nbsp; 33/39<br>
+      2026-01-20 FloodHub . . 0.207 &rarr; <b>0.320</b> &nbsp; <b>+0.113</b> &nbsp; p&lt;0.0001 &nbsp; 31/39<br>
+      2026-01-24 FloodHub . . 0.215 &rarr; <b>0.320</b> &nbsp; <b>+0.105</b> &nbsp; p=0.0003 &nbsp; 30/39<br>
+      2026-01-24 Combo . . . 0.219 &rarr; <b>0.320</b> &nbsp; <b>+0.101</b> &nbsp; p=0.0007 &nbsp; 28/39<br>
+      2026-01-28 Combo . . . 0.261 &rarr; <b>0.320</b> &nbsp; <b>+0.059</b> &nbsp; p=0.023 &nbsp;&nbsp; 24/39<br>
+      2026-01-26 FloodHub . . 0.321 &rarr; <b>0.320</b> &nbsp; <span class="bad">&minus;0.001</span> &nbsp; p=0.50 &nbsp;&nbsp;&nbsp; 23/39
+    </div>
+    <p>Against the mean of the eight, SAGE gains <strong>+0.116 F1@2yr</strong> (31/39 gauges, p&lt;0.0001) and <strong>+0.069 median NSE</strong>. Against the single best earlier run it is a dead heat. Both statements are true and the first one is the more informative: Section 03 established that run-to-run spread is the dominant variance component, so benchmarking against the best-of-eight is picking the most favourable draw from the null.</p>
+    <p>The clean test is a panel regression with gauge fixed effects &mdash; 38 shared gauges &times; 9 runs, controlling for the dispersion ratio and its square, with the nine pathological &alpha; outliers (up to 2,733) removed:</p>
+    <div class="ev">
+      <span class="evlab">F1 @ 2 yr &middot; gauge fixed effects &middot; 342 observations</span>
+      &alpha; . . . . . . . . . . . +0.825 &nbsp;(se 0.081, p&lt;0.0001)<br>
+      &alpha;&sup2; . . . . . . . . . . &minus;0.251 &nbsp;(se 0.034, p&lt;0.0001)<br>
+      <b>SAGE indicator . . . . +0.050 &nbsp;(se 0.020, p=0.012)</b><br>
+      <br>same with &alpha;&le;2 instead of &alpha;&le;3: SAGE <b>+0.045</b> (p=0.030)<br>
+      pooled OLS over all 9 runs, adding log(nodes) and log(event days): SAGE <b>+0.069</b> (p&lt;0.0001)
+    </div>
+    <p>All three designs agree on a <strong>+0.045 to +0.069</strong> gain that survives controlling for dispersion and basin size. <strong>This is the first architecture-or-configuration effect in the project that is not explained by training noise</strong>, and it supersedes Section 03's "architecture explains none of it" &mdash; which was correct for the models then available, every one of which had a dead graph.</p>
+  </div>
+
+  <div class="finding blocking">
+    <div class="fhead"><span class="fid">F18</span><span class="ftitle">But the gain is not attributable to the graph</span><span class="tag blocking">Confound</span></div>
+    <p>If the graph were the source, the advantage should grow with graph size. It does not. Adding a SAGE &times; log(upstream nodes) interaction to the same panel:</p>
+    <div class="ev">
+      SAGE (at mean graph size) . . <b>+0.051</b> &nbsp;(p=0.010)<br>
+      SAGE &times; log(nodes), centred . . <b>+0.020</b> &nbsp;(se 0.015, <span class="bad">p=0.18</span>)<br>
+      <br>with &alpha;&le;2: interaction <b>+0.019</b> (p=0.22). The apparent interaction in an unfiltered fit is driven entirely by the &alpha; outliers.
+    </div>
+    <p>And the run changed at least six things at once relative to the earlier arm:</p>
+    <div class="ev">
+      <span class="evlab">SAGE vs the 2026-01-26 FloodHub baseline</span>
+      GraphSAGE-gated LSTM with live gradients &nbsp;&nbsp; vs &nbsp; lumped LSTM<br>
+      <b>rolling: 30</b> &mdash; 7 &rarr; 21 dynamic features &nbsp;&nbsp;&nbsp; vs &nbsp; no rolling statistics<br>
+      <b>head.mixtures: 4</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; vs &nbsp; 1<br>
+      <b>47,384 steps</b> (+32 %) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; vs &nbsp; 36,000<br>
+      nodesPerBatch 10,000 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; vs &nbsp; batchSize 256<br>
+      a different 162-gauge test split (41 shared) &nbsp;&nbsp; vs &nbsp; the earlier split
+    </div>
+    <p>Of these, <code>rolling: 30</code> is the one with a clear mechanism: it is the only change that attacks F13 directly, giving the 60-day encoder an explicit 30-day mean and standard deviation per variable &mdash; a longer-timescale summary standing in for the snowpack memory the window cannot hold. <strong>The most likely reading is that the extra features, not the graph, bought the +0.05.</strong> One ablation settles it: rerun SAGE with <code>rolling</code> removed, and rerun the lumped model with <code>rolling: 30</code> added.</p>
+    <p>And the treatment arm is <strong>n = 1</strong>. With a best-vs-worst spread of 0.108 F1 among the four earlier FloodHub runs, a single run cannot separate "this configuration is better" from "this run landed well." Two more seeds would settle it.</p>
+  </div>
+
+  <div class="col">
+    <p>The nine runs together now give 1,431 (run, gauge) observations spanning &alpha; from 0.14 to 2.95 &mdash; enough to measure the trade-off curve of Section 05 directly rather than by simulation.</p>
+  </div>
+
+  <figure>
+    <div class="figtitle">The two objectives peak at different dispersions</div>
+    <div class="figsub">1,431 run-gauge observations across 9 runs &middot; binned on &sigma;(prediction)/&sigma;(observation)</div>
+    <div class="legend">
+      <span class="key"><span class="dot" style="background:var(--accent)"></span>mean F1 @ 2-yr (left)</span>
+      <span class="key"><span class="dot" style="background:var(--ok)"></span>median NSE (right)</span>
+    </div>
+    <svg viewBox="0 0 760 300" role="img" aria-label="Flood F1 rises with dispersion and peaks near a ratio of 1.2, while Nash-Sutcliffe efficiency peaks near 0.87 and collapses beyond 1.3.">
+      <g stroke="var(--rule)" stroke-width="1">
+        <line x1="88" y1="40" x2="668" y2="40"/><line x1="88" y1="90" x2="668" y2="90"/>
+        <line x1="88" y1="140" x2="668" y2="140"/><line x1="88" y1="190" x2="668" y2="190"/>
+        <line x1="88" y1="240" x2="668" y2="240"/>
+      </g>
+      <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--accent)" text-anchor="end">
+        <text x="80" y="44">0.40</text><text x="80" y="94">0.30</text><text x="80" y="144">0.20</text>
+        <text x="80" y="194">0.10</text><text x="80" y="244">0.00</text>
+      </g>
+      <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ok)" text-anchor="start">
+        <text x="676" y="44">0.80</text><text x="676" y="94">0.55</text><text x="676" y="144">0.30</text>
+        <text x="676" y="194">0.05</text><text x="676" y="244">&minus;0.20</text>
+      </g>
+      <!-- where the runs sit -->
+      <rect x="252" y="34" width="60" height="212" fill="var(--ink-2)" opacity="0.07"/>
+      <text x="282" y="30" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--muted)" text-anchor="middle">8 earlier runs</text>
+      <line x1="317" y1="34" x2="317" y2="246" stroke="var(--stage)" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <text x="322" y="46" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--stage)">SAGE</text>
+      <!-- NSE (clipped: last bin is -1.64, off scale) -->
+      <polyline fill="none" stroke="var(--ok)" stroke-width="2.2" stroke-dasharray="5 3"
+        points="104,163.2 209,113.1 257,85.0 306,70.7 354,71.3 410,115.7 491,177.0 560,246"/>
+      <g fill="var(--ok)">
+        <circle cx="104" cy="163.2" r="3"/><circle cx="209" cy="113.1" r="3"/><circle cx="257" cy="85.0" r="3"/>
+        <circle cx="306" cy="70.7" r="4.6"/><circle cx="354" cy="71.3" r="3"/><circle cx="410" cy="115.7" r="3"/>
+        <circle cx="491" cy="177.0" r="3"/>
+      </g>
+      <text x="660" y="232" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ok)" text-anchor="end">&minus;1.64, off scale</text>
+      <text x="306" y="62" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ok)" text-anchor="middle">NSE optimum</text>
+      <!-- F1 -->
+      <polyline fill="none" stroke="var(--accent)" stroke-width="2.6"
+        points="104,197.9 209,183.6 257,157.6 306,131.3 354,89.2 410,62.1 491,67.7 636,101.4"/>
+      <g fill="var(--accent)">
+        <circle cx="104" cy="197.9" r="3.4"/><circle cx="209" cy="183.6" r="3.4"/><circle cx="257" cy="157.6" r="3.4"/>
+        <circle cx="306" cy="131.3" r="3.4"/><circle cx="354" cy="89.2" r="3.4"/><circle cx="410" cy="62.1" r="5"/>
+        <circle cx="491" cy="67.7" r="3.4"/><circle cx="636" cy="101.4" r="3.4"/>
+      </g>
+      <text x="410" y="52" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--accent)" text-anchor="middle">F1 optimum</text>
+      <line x1="88" y1="34" x2="88" y2="246" stroke="var(--rule-2)" stroke-width="1"/>
+      <line x1="668" y1="34" x2="668" y2="246" stroke="var(--rule-2)" stroke-width="1"/>
+      <line x1="88" y1="246" x2="668" y2="246" stroke="var(--rule-2)" stroke-width="1"/>
+      <g font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--muted)" text-anchor="middle">
+        <text x="88" y="264">0.2</text><text x="217" y="264">0.6</text><text x="346" y="264">1.0</text>
+        <text x="475" y="264">1.4</text><text x="604" y="264">1.8</text>
+        <text x="378" y="286" font-size="11">&#963;(prediction) / &#963;(observation)</text>
+      </g>
+    </svg>
+    <figcaption>NSE peaks in the <b>0.80&ndash;0.95</b> band (median 0.647) and collapses to <b>&minus;1.64</b> beyond 1.6. Flood F1 keeps rising to a peak in the <b>1.10&ndash;1.30</b> band (0.356) &mdash; recall climbing from 0.056 to 0.433 while precision falls from 0.40 to 0.34 &mdash; then declines as false positives take over. Binned on &alpha;/r instead, NSE peaks at 0.90&ndash;1.05 and F1 at 1.25&ndash;1.60. <b>The two objectives want genuinely different operating points, and the gap is large.</b></figcaption>
+  </figure>
+
+  <div class="callout">
+    <div class="clab">This confirms and sharpens Section 05</div>
+    <p>The eight earlier runs all sat at &alpha; = 0.71&ndash;0.83, on the NSE optimum. SAGE is the first to move off it &mdash; &alpha; = 0.91, &alpha;/r = 1.17 &mdash; and it bought the best flood F1 of the nine runs (0.286 on its own test set) while giving up median NSE against the two best earlier runs (0.517 against 0.551 and 0.549). That is exactly the trade Section 05 predicted, now observed rather than simulated. It also shows the earlier estimate was conservative: the measured curve says there is still room to move, since the F1 optimum sits at &alpha; &asymp; 1.2, not 1.0.</p>
+    <p>The caveat from Section 05 stands and matters more now: moving <em>dispersion</em> and moving the <em>decision threshold</em> are not the same intervention. Raising &alpha; makes the model noisier as well as bolder, and costs NSE. Scoring against the model's own return-period thresholds gets the recall without the NSE penalty. Do the threshold fix first, then decide how much dispersion you still want.</p>
+  </div>
+
+  <div class="finding blocking">
+    <div class="fhead"><span class="fid">F20</span><span class="ftitle">The train/test split is not stable under any change to the gauge set</span><span class="tag blocking">Blocking</span></div>
+    <p>The two runs share only 41 of ~161 test gauges, and that was not intended. The cause is in <code>InundationData.split</code>, which both models used:</p>
+    <div class="ev">
+      trainIDs = np.array(riverIDs)[np.random.choice(<b class="bad">len(riverIDs)</b>, int(len(riverIDs) * trainSplit), replace=False)]
+    </div>
+    <p>The draw is over <em>positions</em> in a list whose order and length are set by <code>grdcDict</code>'s insertion order &mdash; which is the RiverATLAS join order, minus whichever gauges the QA filters happened to drop. Add or remove one gauge anywhere and every gauge after it shifts by one position, so the fixed seed reproduces the same <em>indices</em> against a different <em>list</em>. Simulating the mechanism on an 805-gauge list:</p>
+    <div class="ev">
+      <span class="evlab">Test-set gauges shared with the unperturbed split, seed 1234</span>
+      identical list . . . . . . . . . . . . . . . 161 gauges &nbsp; <b>100 %</b><br>
+      one gauge removed from the middle . . . . . . 161 gauges &nbsp; <b>66 %</b><br>
+      one gauge added at the start . . . . . . . . 162 gauges &nbsp; <b>29 %</b><br>
+      five added / three removed at random . . . . 162 gauges &nbsp; <b>26 %</b><br>
+      same 805 gauges, list order permuted . . . . 161 gauges &nbsp; <b>16 %</b><br>
+      <br><b>observed between the two real runs . . . 162 gauges &nbsp; 25 %</b>
+    </div>
+    <p>The test set grew from 161 to 162, so the usable gauge count changed by a handful &mdash; and that is sufficient. The simulated "five added / three removed" case reproduces the observed overlap to within a percentage point.</p>
+    <p>This is worse than one lost comparison. It means <strong>no two runs in this repository are guaranteed to share a test set unless the gauge set is byte-identical</strong>, and nothing warns you when it isn't: any change to a QA threshold, to the join, to the files on disk, or to the pipeline silently redraws the partition while the seed and the config stay the same. Every cross-run comparison in the project rests on an assumption that is not enforced anywhere.</p>
+    <p>The fix is small and worth making before the next run: derive membership from a stable hash of the gauge ID rather than from a positional draw &mdash; <code>test = {id for id in riverIDs if sha1(id) % 100 &gt;= 100 * trainSplit}</code>. That is invariant to order, to count, and to every filter upstream of it, and it lets a gauge that reappears after a pipeline change land back on the side it was on before. It would also make the earlier runs directly comparable to future ones for the first time.</p>
+  </div>
+
+  <div class="finding blocking">
+    <div class="fhead"><span class="fid">F19</span><span class="ftitle">The pipeline refactor will crash on the first line of every training run</span><span class="tag blocking">Blocking</span></div>
+    <p>Separately from everything above &mdash; the SAGE model was trained on the original <code>utils/data/dataset.py</code>, not on this &mdash; <code>utils/data/pipeline/</code> is a careful rewrite whose documented list of deliberately preserved quirks is accurate. It is also, as its own docstring says, unvalidated. One defect is unambiguous from reading:</p>
+    <div class="ev">
+      <span class="evlab">basinGraph.py &rarr; dataset.py &rarr; display()</span>
+      <span class="bad">graphs</span> is keyed by <code>targetPfafIDs</code> &mdash; gauge basins only (~2,500)<br>
+      but <code>display()</code> does &nbsp;<code>for pfafID in basinIDs: graph = self.graphs[pfafID]</code><br>
+      where <code>basinIDs</code> is <em>every upstream basin</em> of the gauge<br>
+      <br>and <code>train.py:103</code> calls <code>dataset.display(grdcID="4127501")</code> unconditionally<br>
+      <span class="bad">&rarr; KeyError for any gauge with more than one upstream basin</span>
+    </div>
+    <p>The original kept <code>self.graphs</code> keyed by every basin with ERA5 data, which is why it worked. The scoping change in <code>computeUpstreamStructures</code> is sound for the hot path &mdash; <code>__getitem__</code> only ever looks up gauge basins &mdash; but <code>display()</code> is the one caller that does not.</p>
+    <p>Three smaller things. The validation script <code>CLAUDE.md</code> points at, <code>analysis/validate_pipeline_refactor.py</code>, <strong>is not in the repository</strong> &mdash; <code>analysis/</code> is in <code>.gitignore</code>, so it was never pushed. Cache fingerprints cover raw-file size and mtime plus the config, but <em>not the machine timezone</em>, while <code>datetime(1980,1,1).timestamp()</code> and <code>x.timestamp() // 86400</code> are local-time dependent &mdash; a cache built under one <code>TZ</code> is silently wrong under another, which defeats the point of a shared cache. And the new <code>if riverID not in gaugeDict: continue</code> guard in <code>gauges.py</code> converts what would have been a crash into a silently dropped gauge; it is a reasonable guard, but it should log.</p>
+    <p>Because the port faithfully preserves the original's behaviour, <strong>every finding in this report survives the swap unchanged</strong>. Two are now worth reconsidering rather than preserving, since the refactor has isolated them: the <code>Mean</code>/<code>Deviation</code> vs <code>Catchment</code> mismatch (F12) now sits alone in <code>samples.py</code> and feeds the NSE denominator, and <code>calculateReturnPeriods</code> (F7) now sits alone in <code>gauges.py</code> with the period list already a parameter. Both are one-line fixes in the new layout.</p>
+  </div>
+</section>
+
+<section>
+  <div class="snum">07 — Measurement</div>
   <h2>Six defects in the evaluation, and what each one does to the number</h2>
 
   <div class="finding blocking">
@@ -662,7 +822,7 @@ figcaption b{color:var(--ink-2);font-weight:600}
 </section>
 
 <section>
-  <div class="snum">07 — Modelling and data</div>
+  <div class="snum">08 — Modelling and data</div>
   <h2>What is actually limiting skill</h2>
 
   <div class="col">
@@ -764,7 +924,7 @@ figcaption b{color:var(--ink-2);font-weight:600}
 </section>
 
 <section>
-  <div class="snum">08 — What to do</div>
+  <div class="snum">09 — What to do</div>
   <h2>Ranked by expected return per dollar of GPU time</h2>
 
   <div class="grid2">
@@ -777,6 +937,7 @@ figcaption b{color:var(--ink-2);font-weight:600}
         <li>Report a high quantile of the predictive distribution as the alert statistic instead of the mixture mean; use the closed-form mean where a point estimate is needed.</li>
         <li>Put climatology, day-of-year climatology and persistence in every table. A model that beats seasonal climatology by 0.18 NSE should say so.</li>
         <li>Report <em>median per-gauge</em> NSE and event counts alongside every F1.</li>
+        <li><b>Make the split ID-stable (F20)</b> before the next run, so results stay comparable across pipeline changes.</li>
       </ul>
     </div>
     <div class="stack">
