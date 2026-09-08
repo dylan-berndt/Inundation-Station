@@ -211,6 +211,23 @@ class InundationData(Dataset):
             print("Total Useable Gauges:", len(self.grdcDict.keys()))
             print("Total Useable Basins:", len(self.pfafDict.keys()))
 
+    def upstreamGraph(self, pfafID):
+        """Subgraph induced by a gauge basin and everything upstream of it."""
+        return self.graphs[pfafID]
+
+    # See utils/data/dataset.py: attributes a DataLoader worker never touches,
+    # dropped from the pickle payload sent to each spawned worker.
+    WORKER_EXCLUDED = (
+        "graph", "graphs", "basinATLAS", "riverSHP",
+        "basinContinuous", "basinDiscrete", "riverContinuous", "riverDiscrete",
+    )
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        for key in self.WORKER_EXCLUDED:
+            state.pop(key, None)
+        return state
+
     def __len__(self):
         return len(self.indexMap)
 
@@ -397,7 +414,7 @@ class InundationData(Dataset):
             # immediately.
             drawn = set()
             for grdcID in grdcIDs:
-                graph = self.graphs[self.translateDict[grdcID]]
+                graph = self.upstreamGraph(self.translateDict[grdcID])
                 for source, target in graph.edges():
                     if source == target or (source, target) in drawn:
                         continue

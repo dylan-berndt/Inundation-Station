@@ -415,9 +415,6 @@ class InundationData(Dataset):
         self.upstreamStructure = {
             node: list(graph.subgraph(self.upstreamBasins[node]).edges) for node in self.pfafDict.keys()
         }
-        self.graphs = {
-            node: graph.subgraph(self.upstreamBasins[node]) for node in self.pfafDict.keys()
-        }
         print("Upstream Structures Compiled")
 
         for node in self.upstreamStructure:
@@ -603,6 +600,33 @@ class InundationData(Dataset):
         print("Total Useable Gauges:", len(grdcDict.keys()))
         print("Total Useable Basins:", len(pfafDict.keys()))
 
+    def upstreamGraph(self, pfafID):
+        """Subgraph induced by a gauge basin and everything upstream of it.
+
+        Built on demand rather than cached. `nx.Graph.subgraph` returns a view
+        backed by local closures (`subgraph_view.<locals>.reverse_edge`), which
+        cannot be pickled - and on Windows the DataLoader spawns workers by
+        pickling the Dataset, so holding a dict of these views made
+        `num_workers > 0` fail outright."""
+        return self.graph.subgraph(self.upstreamBasins[pfafID])
+
+    # Attributes a DataLoader worker never touches. `__getitem__` reads only
+    # config/forecastNoise/grdcDict/hopDistances/indexMap/offsetMap/pfafDict/
+    # transform/translateDict/upstreamBasins/upstreamStructure - everything
+    # below is used during construction or by display() in the parent process.
+    # Dropping them keeps the basin graph and two GeoDataFrames out of the
+    # payload sent to every worker.
+    WORKER_EXCLUDED = (
+        "graph", "graphs", "basinATLAS", "riverSHP",
+        "basinContinuous", "basinDiscrete", "riverContinuous", "riverDiscrete",
+    )
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        for key in self.WORKER_EXCLUDED:
+            state.pop(key, None)
+        return state
+
     def __len__(self):
         return len(self.indexMap)
 
@@ -787,11 +811,10 @@ class InundationData(Dataset):
                 centroids[basinID] = (centroid.x, centroid.y)
 
             # One subgraph per gauge, not one per upstream basin: the gauge's
-            # own subgraph already contains every edge being drawn, and
-            # self.graphs is only guaranteed to be keyed by gauge basins.
+            # own subgraph already contains every edge being drawn.
             drawn = set()
             for grdcID in grdcIDs:
-                graph = self.graphs[self.translateDict[grdcID]]
+                graph = self.upstreamGraph(self.translateDict[grdcID])
                 for source, target in graph.edges():
                     if source == target or (source, target) in drawn:
                         continue

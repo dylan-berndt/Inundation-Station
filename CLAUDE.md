@@ -128,6 +128,29 @@ All optional, all with defaults that keep existing configs working:
 | `clipNorm` | `1.0` | gradient-norm clip. `0` disables. |
 | `amp` | bf16 on CUDA if supported | mixed-precision autocast. |
 
+### Windows DataLoader workers pickle the Dataset
+
+`num_workers > 0` on Windows uses the spawn start method, which sends the
+Dataset to each worker by pickling it. Two things on the Dataset used to make
+that impossible, so any multi-worker run died before the first batch:
+
+- `self.graphs` held `nx.Graph.subgraph(...)` **views**, which are backed by
+  local closures (`AttributeError: Can't pickle local object
+  'subgraph_view.<locals>.reverse_edge'`). Subgraphs are now built on demand
+  via `dataset.upstreamGraph(pfafID)`, and `utils/data/pipeline/basinGraph.py`
+  stores real `nx.DiGraph` copies (it also `torch.save`s them into the stage
+  cache, which had the same problem).
+- `Transform` held lambdas. It is now a plain class holding `(mode, mean, std)`
+  and looking the warp up by name in `WARPS`, so it pickles to three values.
+
+Both classes also define `__getstate__`, which drops `graph`, `graphs`,
+`basinATLAS`, `riverSHP` and the four static-feature DataFrames from the worker
+payload. `__getitem__` never touches them, and they are the bulk of the object.
+
+Anything new stored on the Dataset must be picklable: use module-level classes
+or functions, never lambdas or closures. The `RampNoise`/`IdentityNoise`
+classes already exist for exactly this reason.
+
 `migrateMetrics.py` rewrites existing `checkpoints/*/metrics.json` onto the
 current schema: it un-swaps the `targetMean`/`targetDev` keys (which made every
 previously reported KGE wrong) and drops the legacy 1-year threshold column.

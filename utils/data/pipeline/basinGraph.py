@@ -71,7 +71,12 @@ def computeUpstreamStructures(graph, targetPfafIDs, verbose=True):
         nodes = [node] + sorted(nx.ancestors(graph, node))
         upstreamBasins[node] = nodes
 
-        subgraph = graph.subgraph(nodes)
+        # A real copy, not `graph.subgraph(nodes)`. That returns a view backed
+        # by local closures (`subgraph_view.<locals>.reverse_edge`), which is
+        # unpicklable - it would break both the StageCache torch.save below and
+        # the Windows DataLoader, which pickles the Dataset to spawn workers.
+        # Only gauge basins are stored here, so the copies are cheap.
+        subgraph = nx.DiGraph(graph.subgraph(nodes))
         graphs[node] = subgraph
 
         nodeMap = dict(zip(nodes, range(len(nodes))))
