@@ -283,19 +283,61 @@ HierarchicalSAGEConfig.json` sweeps the node budget instead of the batch size
 and reports the largest that fits, using synthetic graphs drawn from the
 measured gauge size distribution (median 9 nodes, mean 24.3, tail to 730).
 
-Measured anchor, from `sandy-sky-115` (hidden 128, 4 mixtures, `nodesPerBatch`
-10000) on a ~43 GB card: 8.7 GB median, 14.5 GB p95, 16.1 GB peak VRAM, at
-0.434 steps/s. Fixed cost is negligible — 8.24 M parameters is 132 MB with
-gradients and Adam state — so essentially all of it is activations, about
-**1.5 MB of VRAM per node** at history 60 and 2 layers.
+The anchor to use is **`dandy-planet-110` (m8l51azu), which ran the
+hierarchical model on the GTX 1660 SUPER itself** at `nodesPerBatch` 2000,
+hidden 256, history 60 — old code, GCLSTM backend:
 
-`configs/HierarchicalSAGE6GBConfig.json` is that model sized for a 6 GB card
-(GTX 1660 Super): `nodesPerBatch` 2000 for a ~3.4 GB peak, `amp: false`
-(TU116 has no tensor cores at all), 2/1 DataLoader workers, `evalEvery` 25.
-History stays at 60 to match `FloodHubConfig.json`. Note that SAGE also sets
-`rolling: 30`, which triples the ERA5 channel count (21 vs FloodHub's 7) — if
-the point is a like-for-like comparison, that difference has to be settled one
-way or the other.
+```
+  3.03 s/step (0.330 steps/s)
+  VRAM   median 4.43 GB   p95 5.60 GB   peak 5.87 GB  = 91.1% of the card
+  host   rss 17.7 GB resident, only 5.8 GB free
+  GPU utilisation 55% median
+```
+
+So `nodesPerBatch` 2000 at hidden **256** is already at the edge of a 6 GB
+card. Halving to hidden 128 roughly halves activations, landing near 3.0-3.3 GB
+peak, which is what `configs/HierarchicalSAGE6GBConfig.json` targets
+(`amp: false` — TU116 has no tensor cores at all; `evalEvery` 25; history 60 to
+match `FloodHubConfig.json`).
+
+**`numWorkers` must be 0 for the graph model on this machine.** The Dataset is
+17.7 GB resident and Windows spawns workers by pickling it, so one worker is
+another ~17 GB against 5.8 GB free. FloodHub's Dataset on the same machine is
+only 1.3 GB resident, which is why 4 workers is fine there and not here.
+
+Note SAGE also sets `rolling: 30`, which triples the ERA5 channel count (21 vs
+FloodHub's 7) — if the point is a like-for-like comparison against FloodHub,
+that difference has to be settled one way or the other.
+
+### What the 2026-09 changes actually bought, per model
+
+Careful with cross-run throughput: **every pre-change FloodHub run is on an
+A100-PCIE-40GB**, and the recent one is on the 1660 Super, so comparing them
+mixes a hardware change with the code change. Per step it is 229 ms (A100, old)
+against 105 ms (1660, new) — the new code on strictly worse hardware, so ~2.2x
+is a *lower bound* for FloodHub, not the figure itself.
+
+Where it came from is measurable. From `graceful-cherry-119`'s own per-step
+`_runtime` deltas (4,429 consecutive pairs), on the 1660:
+
+```
+  plain step   median 105.01 ms
+  eval  step   median 103.79 ms      -> an evaluation costs nothing
+```
+
+So `evalEvery` is not the lever. The lever is the point estimate: the old loop
+called `CMAL.sample(..., 10000)` **twice on every step** (train.py:150 and :175,
+train batch and test batch), and that cost depends only on
+`gauges x future x mixtures`, never on history or graph size — a flat tax per
+step. Measured on CPU: 1,590 ms per call at FloodHub's 256 gauges x 1 mixture,
+313 ms at ~82 gauges x 1 mixture, 1,281 ms at ~82 gauges x 4 mixtures.
+
+That tax dwarfed FloodHub's ~105 ms step, and is a small fraction of the graph
+model's ~3,030 ms step. **The graph model should therefore gain only about
+1.2x from these changes, not FloodHub's 2x+.** Its step is dominated by 960
+sequential graph convolutions per forward (60 timesteps x 2 layers x 8
+SAGEConv), which is also why an A100 is only ~2x a 1660 Super here and why GPU
+utilisation sits near 55%: the model is kernel-launch bound, not FLOP bound.
 
 ## Notes for making changes
 
