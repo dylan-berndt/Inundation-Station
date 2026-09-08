@@ -75,6 +75,43 @@ wandb logging is enabled by default (`entity="dylanberndt123-missouri-state-univ
 
 `CMAL.sample(...)` Monte Carlo samples from the predicted mixture; predictions must be run through `dataset.transform.backward(...)` before comparing against real-unit targets or computing eval metrics (see the training loop in `train.py`).
 
+## Data pipeline refactor (utils/data/pipeline/) — pending validation
+
+`utils/data/pipeline/` is a from-scratch, modular rewrite of `utils/data/dataset.py` +
+`utils/data/precompute.py`, added to make the loading pipeline auditable in
+pieces and to cache the expensive stages (ERA5 parquet→tensor transform,
+basin graph construction, GRDC spline fitting) to disk so repeat loads don't
+redo them. It is **not wired into `train.py`/`test.ipynb` yet** and the
+original `utils/data/dataset.py`/`precompute.py` are untouched — this is a
+parallel implementation for review before swapping in.
+
+- Modules: `caching.py` (fingerprint-keyed disk cache), `joins.py` (spatial
+  joins/Parquet conversion, refactor of `precompute.py`), `gauges.py` (GRDC
+  series), `basinGraph.py` (basin connectivity + upstream structure, with a
+  vectorized O(n) graph build replacing the original's O(n²) row-scan, and
+  ancestor/hop-distance computation scoped to gauge basins only instead of
+  every basin in North America), `weatherSeries.py` (per-basin ERA5 tensors —
+  the biggest cache win), `staticFeatures.py`, `samples.py` (sample index +
+  global transform), `sampler.py` (`GraphSizeSampler`), `dataset.py`
+  (`InundationData`/`FloodHubData` composed from the above, same public API).
+- Numerically it's intended to be a byte-for-byte match to the original
+  pipeline — known quirks in the original (downsampling area-weight merge
+  being dead code, `allTargets` including later-excluded gauges, etc. — see
+  `flood-model-pipeline-findings` memory) were deliberately preserved, not
+  "fixed", since the user has previously declined fixing those as
+  out-of-scope for a refactor.
+- **Not yet run against real data.** `analysis/validate_pipeline_refactor.py`
+  instantiates both the old and new pipelines from the same config and
+  checks: same gauge set/sample count/indexMap, numerically identical
+  `__getitem__` output on a spread of indices, identical `split()`
+  train/test partitions at a fixed seed, and cold-vs-warm-cache load time.
+  Run it once a large workload isn't competing for the machine:
+  `.\venv\Scripts\python.exe analysis\validate_pipeline_refactor.py GCLSTMConfig.json`
+  (defaults to `GCLSTMConfig.json` if no arg given — pick a config with
+  `scales` already populated so the run doesn't also do first-time setup).
+  If it reports mismatches, treat `utils/data/pipeline/` as unverified and
+  fix before ever pointing `train.py` at it.
+
 ## Notes for making changes
 
 - When adding a new model variant, follow the existing `*Station` convention (constructor takes `Config`, `forward` returns `(hindcast, forecast)` of CMAL params) and add a matching `configs/<Name>Config.json`, then re-export it from `utils/models/__init__.py`.

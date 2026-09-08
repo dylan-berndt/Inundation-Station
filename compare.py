@@ -61,17 +61,35 @@ def calcMetrics(metricSet):
     return calculated
 
 
+def alignNames(source, target):
+    """Return (sourceIdx, targetIdx) indexing into `source`/`target`'s ["names"]
+    restricted to gauges present in both, skipping any that are missing from either."""
+    targetNameToIndex = {name: idx for idx, name in enumerate(target["names"].tolist())}
+    sourceNames = source["names"].tolist()
+
+    sourceIdx = [i for i, name in enumerate(sourceNames) if name in targetNameToIndex]
+    targetIdx = [targetNameToIndex[sourceNames[i]] for i in sourceIdx]
+
+    skipped = len(sourceNames) - len(sourceIdx)
+    if skipped > 0:
+        print(f"Skipping {skipped} gauge(s) not present in both datasets.")
+
+    return sourceIdx, targetIdx
+
+
 def plotMetrics(metrics, names, colors):
     calculated = [calcMetrics(metricSet) for metricSet in metrics]
 
     basis = calculated[0]["totalPositives"]
     for i in range(1, len(calculated)):
-        comparison = np.array([calculated[i]["totalPositives"][calculated[i]["names"].tolist().index(name)] for name in calculated[0]["names"]])
-        print(np.allclose(basis, comparison))
-        print(np.max(np.abs(basis - comparison), axis=0))
+        basisIdx, comparisonIdx = alignNames(calculated[0], calculated[i])
+        currentBasis = basis[basisIdx]
+        comparison = calculated[i]["totalPositives"][comparisonIdx]
+        print(np.allclose(currentBasis, comparison))
+        print(np.max(np.abs(currentBasis - comparison), axis=0))
 
-        for i in range(4):
-            mismatch = np.abs(basis - comparison)[:, i]
+        for j in range(4):
+            mismatch = np.abs(currentBasis - comparison)[:, j]
             plt.hist(mismatch[mismatch > 0])
             plt.show()
 
@@ -185,14 +203,14 @@ def plotMetrics(metrics, names, colors):
         if i == floodHubIndex:
             continue
 
+        xIdx, yIdx = alignNames(calculated[i], floodHubMetrics)
+
         values = []
         samples = []
         for j, test in enumerate(tests):
-            x = calculated[i][test]
-            y = floodHubMetrics[test]
-
-            # Sort Y to perform paired test with Wilcoxon
-            y = np.array([y[floodHubMetrics["names"].tolist().index(name)] for name in calculated[i]["names"]])
+            # Align X and Y to the shared set of gauges to perform a paired test with Wilcoxon
+            x = calculated[i][test][xIdx]
+            y = floodHubMetrics[test][yIdx]
 
             if test == "f1":
                 for k in range(4):
@@ -213,9 +231,9 @@ def plotMetrics(metrics, names, colors):
 
 
 # paths = ["2026-01-24 05-33 Combo ChebBlock5", "2026-01-25 06-45 FloodHub"]
-paths = ["2026-01-28 23-16 Combo ChebBlock5", "2026-01-26 00-53 FloodHub"]
-names = ["STGNN", "Flood Hub"]
-colors = ["tab:blue", "tab:orange"]
+paths = ["2026-08-14 16-38 HierarchicalSAGE", "2026-01-28 23-16 Combo ChebBlock5", "2026-01-26 00-53 FloodHub"]
+names = ["SAGE", "STGNN", "Flood Hub"]
+colors = ["tab:green", "tab:blue", "tab:orange"]
 
 metrics = [json.load(open(os.path.join("checkpoints", paths[i], "metrics.json"))) for i in range(len(paths))]
 
