@@ -5,8 +5,12 @@ through it, so the numbers are the ones training will see. Reports the largest
 batch size that fits, and whether cuDNN or the allocator configuration is what
 is failing.
 
-    python diagnoseGPU.py                       # FloodHubConfig.json
-    python diagnoseGPU.py GCLSTMConfig.json     # any config in configs/
+    python diagnoseGPU.py                              # FloodHubConfig.json
+    python diagnoseGPU.py HierarchicalSAGEConfig.json  # any config in configs/
+
+Configs carrying a `gclstm` block are graph models batched by total node count
+rather than by sample count, so for those the sweep is over `nodesPerBatch` and
+the number reported is the one to put in the config.
 
 Run it with nothing else on the GPU. It takes about a minute.
 """
@@ -19,6 +23,7 @@ import traceback
 # Same default the training script uses. Override in the shell to test another.
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "garbage_collection_threshold:0.8")
 
+import numpy
 import torch
 
 from utils.config import Config
@@ -92,6 +97,134 @@ def trialStep(model, config, batchSize, widths, device, objective):
     return peak
 
 
+
+class GraphInputs:
+    """The attributes HierarchicalBasinGCLSTM actually reads off a batch."""
+
+
+def buildGraphBatch(config, nodeBudget, timesteps, staticWidth, discreteWidth, device, seed=0):
+    """Packs synthetic gauge graphs up to `nodeBudget` total nodes, with the
+    graph-size distribution measured from the held-out gauges (median 9 nodes,
+    mean 24.3, long tail) so the sweep reflects what the sampler really emits."""
+    rng = numpy.random.default_rng(seed)
+    era5Width = 3 * len(config.scales)
+
+    sizes, total = [], 0
+    while total < nodeBudget:
+        size = int(min(max(1, rng.lognormal(2.4, 1.25)), 730))
+        if total + size > nodeBudget and sizes:
+            break
+        sizes.append(size)
+        total += size
+
+    era5, static, discrete, hops, areas, batch, codes = [], [], [], [], [], [], []
+    edges = [[], []]
+    offset = 0
+    for sample, size in enumerate(sizes):
+        era5.append(torch.from_numpy(rng.standard_normal((size, timesteps, era5Width))).float())
+        static.append(torch.from_numpy(rng.standard_normal((size, staticWidth))).float())
+        discrete.append(torch.randint(0, 900, (size, discreteWidth)))
+        hops.append(torch.clamp(torch.arange(size), max=150))
+        areas.append(torch.from_numpy(rng.uniform(80.0, 4000.0, size)).float())
+        batch.append(torch.full((size,), sample, dtype=torch.long))
+        codes.append([7000000 + (i // 9) * 10 + (i % 9) + 1 for i in range(size)])
+        for i in range(1, size):
+            edges[0].append(offset + i)
+            edges[1].append(offset + max(0, (i - 1) // 2))
+        offset += size
+
+    inputs = GraphInputs()
+    inputs.era5 = torch.cat(era5).to(device)
+    inputs.basinContinuous = torch.cat(static).to(device)
+    inputs.basinDiscrete = torch.cat(discrete).to(device)
+    inputs.hopDistance = torch.cat(hops).to(device)
+    inputs.basinArea = torch.cat(areas).to(device)
+    inputs.batch = torch.cat(batch).to(device)
+    inputs.basins = codes
+    inputs.edge_index = torch.tensor(edges, dtype=torch.long).to(device)
+    return inputs, total, len(sizes)
+
+
+def graphTrialStep(model, config, nodeBudget, widths, device, objective):
+    onCuda = device.startswith("cuda")
+    if onCuda:
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+
+    past, nodes, samples = buildGraphBatch(config, nodeBudget, config.history, *widths, device)
+    future, _, _ = buildGraphBatch(config, nodeBudget, config.future, *widths, device)
+    targetFuture = torch.randn(samples, config.future, device=device)
+    targetHistory = torch.randn(samples, config.history, device=device)
+
+    model.zero_grad(set_to_none=True)
+    hindcast, forecast = model((past, future))
+    loss = torch.mean(objective(forecast, targetFuture))
+    lastStep = tuple(parameter[:, -1:, :] for parameter in hindcast)
+    loss = loss + torch.mean(objective(lastStep, targetHistory[:, -1:]))
+    loss.backward()
+
+    peak = 0.0
+    if onCuda:
+        torch.cuda.synchronize()
+        peak = torch.cuda.max_memory_allocated() / 1e6
+    del past, future, targetFuture, targetHistory, hindcast, forecast, loss, lastStep
+    model.zero_grad(set_to_none=True)
+    if onCuda:
+        torch.cuda.empty_cache()
+    return peak, nodes, samples
+
+
+def diagnoseGraph(config, name, device):
+    from utils.models.hierarchical import HierarchicalBasinStation
+
+    staticWidth = sum(1 for key in config.variables.basin if config.variables.basin[key])
+    discreteWidth = sum(1 for key in config.variables.basin if not config.variables.basin[key])
+    widths = (staticWidth, discreteWidth)
+
+    model = HierarchicalBasinStation(config).to(device)
+    objective = CMALLoss()
+
+    budget = config.nodesPerBatch
+    print(f"config          {name}   history {config.history}, future {config.future}, "
+          f"nodesPerBatch {budget}")
+    graphTrialStep(model, config, 256, widths, device, objective)
+    parameters = sum(p.numel() for p in model.parameters())
+    pooling = sum(p.numel() for n, p in model.named_parameters() if "pooling" in n)
+    print(f"model           HierarchicalBasinStation, {parameters / 1e6:.2f} M parameters "
+          f"({pooling / 1e6:.3f} M in learned pooling), "
+          f"{parameters * 16 / 1e6:.0f} MB resident with gradients and Adam state")
+    print()
+
+    print("--- node-budget sweep " + "-" * 47)
+    largest = 0
+    for nodeBudget in (500, 1000, 1500, 2000, 3000, 4000, 6000, 10000):
+        try:
+            peak, nodes, samples = graphTrialStep(model, config, nodeBudget, widths, device, objective)
+            largest = nodeBudget
+            marker = "  <- configured" if nodeBudget == budget else ""
+            print(f"   nodesPerBatch {nodeBudget:>6}  ok   {nodes:>6} nodes / {samples:>4} gauges   "
+                  f"peak {peak:>8.0f} MB{marker}")
+        except (RuntimeError, torch.cuda.OutOfMemoryError) as error:
+            print(f"   nodesPerBatch {nodeBudget:>6}  FAIL {str(error).splitlines()[0][:70]}")
+            if device.startswith("cuda"):
+                torch.cuda.empty_cache()
+            break
+    print(f"   largest node budget that fits: {largest}")
+    print("   pick roughly 70% of that for the config: a budget that only just fits")
+    print("   will OOM later on a fragmented pool, which is how the previous runs died.")
+    print()
+
+    print("--- sustained run at the configured budget " + "-" * 26)
+    try:
+        peaks = [graphTrialStep(model, config, budget, widths, device, objective)[0] for _ in range(15)]
+        print(f"   15 steps ok | peak {min(peaks):.0f}-{max(peaks):.0f} MB, "
+              f"drift {peaks[-1] - peaks[0]:+.0f} MB")
+        if device.startswith("cuda"):
+            print(f"   reserved after 15 steps: {torch.cuda.memory_reserved() / 1e6:.0f} MB")
+    except Exception:
+        traceback.print_exc(limit=3)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("config", nargs="?", default="FloodHubConfig.json")
@@ -108,6 +241,11 @@ def main():
     print()
 
     config = Config().load(os.path.join("configs", args.config))
+
+    # Graph models are batched by total node count, not by sample count.
+    if "gclstm" in config:
+        diagnoseGraph(config, args.config, device)
+        return
 
     # Static-feature widths, inferred the way the dataset builds them.
     staticWidth = sum(1 for key in config.variables.basin if config.variables.basin[key])

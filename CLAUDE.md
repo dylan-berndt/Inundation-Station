@@ -238,6 +238,65 @@ Note `train.sh` regenerates `train.py` from `train.ipynb` via nbconvert, so
 edit `train.py` and re-sync, but do not expect `train.py` edits to survive a
 `train.sh` run on their own.
 
+## Learned pooling in `hierarchical.py` (2026-09-08)
+
+`HierarchicalBasinGCLSTM` aggregated sub-basins three times with an unweighted
+mean — the `1 / count` pooling matrix at each of the two pooling stages, then
+`global_mean_pool` at the readout. Under that, a 100 km2 headwater counted
+exactly as much as a 5,000 km2 basin and the gauge's own outlet was diluted to
+1/n of the prediction. `LearnedPoolingWeighting` existed but was never
+instantiated anywhere, and as written it called `torch.sparse.softmax` with
+`torch_geometric.utils.softmax`'s argument list, so it could not have run.
+
+It is now fixed and wired into both pooling stages and the readout:
+
+- Each node scores itself from its hidden state; scores are softmaxed over its
+  siblings, so weights within a parent sum to 1 for any number of children.
+- With `areaPrior` (default true) `log(area)` is added to the score and the
+  scoring MLP's last layer is zero initialised, so **at step 0 the pooling is
+  exactly area-weighted** and training learns a deviation from the aggregation
+  discharge actually obeys. Verified to 1e-7 against the closed form.
+- Consequence of the zero init: `weight[0]` has exactly zero gradient on the
+  first step and starts training on the second. That is expected, not a bug.
+- Areas propagate through pooling by `poolArea` (a parent drains the sum of its
+  children).
+
+Enabled by a `gclstm.pooling` block. **Absent that block the old unweighted
+behaviour is kept**, so `HierarchicalBasinConfig.json` and every existing
+checkpoint load and behave exactly as before (verified: the 2026-08-14
+HierarchicalSAGE checkpoint still loads `strict=True`).
+
+`poolEdgeIndex` was also rewritten. It used to materialise a dense
+`[nodes, nodes]` adjacency and multiply the pooling matrix in on both sides —
+O(nodes^2) memory for an O(nodes) edge list, which at the 10,000-node batches
+these runs used meant a 400 MB fp32 matrix per pooling stage plus intermediates,
+in both the encoder and the decoder. It now relabels endpoints and coalesces,
+O(edges), and produces an identical edge set (verified against the old
+implementation).
+
+### Sizing a graph run: `diagnoseGPU.py` now handles graph models
+
+Configs carrying a `gclstm` block are batched by **total node count**
+(`nodesPerBatch`), not by sample count — `batchSize` is inert on that path, it
+only applies to `FloodHubData`'s plain DataLoader. `python diagnoseGPU.py
+HierarchicalSAGEConfig.json` sweeps the node budget instead of the batch size
+and reports the largest that fits, using synthetic graphs drawn from the
+measured gauge size distribution (median 9 nodes, mean 24.3, tail to 730).
+
+Measured anchor, from `sandy-sky-115` (hidden 128, 4 mixtures, `nodesPerBatch`
+10000) on a ~43 GB card: 8.7 GB median, 14.5 GB p95, 16.1 GB peak VRAM, at
+0.434 steps/s. Fixed cost is negligible — 8.24 M parameters is 132 MB with
+gradients and Adam state — so essentially all of it is activations, about
+**1.5 MB of VRAM per node** at history 60 and 2 layers.
+
+`configs/HierarchicalSAGE6GBConfig.json` is that model sized for a 6 GB card
+(GTX 1660 Super): `nodesPerBatch` 2000 for a ~3.4 GB peak, `amp: false`
+(TU116 has no tensor cores at all), 2/1 DataLoader workers, `evalEvery` 25.
+History stays at 60 to match `FloodHubConfig.json`. Note that SAGE also sets
+`rolling: 30`, which triples the ERA5 channel count (21 vs FloodHub's 7) — if
+the point is a like-for-like comparison, that difference has to be settled one
+way or the other.
+
 ## Notes for making changes
 
 - When adding a new model variant, follow the existing `*Station` convention (constructor takes `Config`, `forward` returns `(hindcast, forecast)` of CMAL params) and add a matching `configs/<Name>Config.json`, then re-export it from `utils/models/__init__.py`.
