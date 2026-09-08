@@ -8,37 +8,62 @@ import math
 from scipy.stats import wilcoxon
 
 
+# Return periods, in years, that threshold column i corresponds to.
+#   schema 2 (current):  [2, 5, 10]
+#   schema 1 (legacy):   [1, 2, 5, 10], where the "1 year" column is really the
+#                        1st percentile of the fitted distribution - a low-flow
+#                        threshold exceeded on about half of all days. It is
+#                        dropped on load so legacy and current runs line up.
+RETURN_PERIODS = [2, 5, 10]
+LEGACY_RETURN_PERIODS = [1, 2, 5, 10]
+
+
+def readGauge(entry):
+    """Normalizes one gauge record to the current schema.
+
+    In schema 1 the two keys were written the wrong way round in test.ipynb -
+    "targetDev" held the mean and "targetMean" held the deviation - so every
+    KGE computed from those files was wrong. Files written after that fix carry
+    "schema": 2 and need no correction."""
+    legacy = int(entry.get("schema", 1)) < 2
+
+    observedMean = entry["targetDev"] if legacy else entry["targetMean"]
+    observedDev = entry["targetMean"] if legacy else entry["targetDev"]
+
+    tp = np.array(entry["tp"]).sum(axis=0)
+    fp = np.array(entry["fp"]).sum(axis=0)
+    fn = np.array(entry["fn"]).sum(axis=0)
+
+    if legacy and len(tp) == len(LEGACY_RETURN_PERIODS):
+        tp, fp, fn = tp[1:], fp[1:], fn[1:]
+
+    return tp, fp, fn, observedMean, observedDev
+
+
 def calcMetrics(metricSet):
+    periods = len(RETURN_PERIODS)
     calculated = {
-        "recall": np.zeros([len(metricSet), 4]),
-        "precision": np.zeros([len(metricSet), 4]),
-        "f1": np.zeros([len(metricSet), 4]),
+        "recall": np.zeros([len(metricSet), periods]),
+        "precision": np.zeros([len(metricSet), periods]),
+        "f1": np.zeros([len(metricSet), periods]),
         "nodes": np.zeros([len(metricSet)]),
         "nrmse": np.zeros([len(metricSet)]),
         "nse": np.zeros([len(metricSet)]),
         "kge": np.zeros([len(metricSet)]),
         "names": np.empty([len(metricSet)], dtype=object),
-        "totalPositives": np.zeros([len(metricSet), 4])
+        "totalPositives": np.zeros([len(metricSet), periods])
     }
 
     for i, name in enumerate(metricSet):
         calculated["nodes"][i] = metricSet[name]["nodes"]
 
-        tp = np.array(metricSet[name]["tp"]).sum(axis=0)
-        fp = np.array(metricSet[name]["fp"]).sum(axis=0)
-        fn = np.array(metricSet[name]["fn"]).sum(axis=0)
+        tp, fp, fn, observedMean, observedDev = readGauge(metricSet[name])
 
         totalPositives = tp + fn
         calculated["totalPositives"][i] = totalPositives
 
         recall = tp / (tp + fn + 1e-8)
         precision = tp / (tp + fp + 1e-8)
-
-        # f1 = np.where(totalPositives > 0,  # If there are ground truth positives
-        #              np.where((tp + fp) > 0,  # and model made predictions
-        #                      2 * precision * recall / (precision + recall + 1e-8),
-        #                      0),  # model made no predictions = F1 of 0
-        #              np.nan)
         f1 = 2 * precision * recall / (precision + recall + 1e-8)
 
         calculated["nrmse"][i] = np.mean(metricSet[name]["rmse"])
@@ -49,12 +74,12 @@ def calcMetrics(metricSet):
 
         calculated["nse"][i] = 1 - (metricSet[name]["nseNum"] / metricSet[name]["nseDenom"])
 
-        alpha = metricSet[name]["predMean"] / metricSet[name]["targetMean"]
-        # I have mixed variance and deviation in my previous script. I am sorry.
-        beta = math.sqrt(metricSet[name]["predDev"]) / metricSet[name]["targetDev"]
+        # Gupta et al. (2009): alpha is the variability ratio, beta the bias
+        # ratio. `predDev` is stored as a variance by StreamingPearson.
+        alpha = math.sqrt(metricSet[name]["predDev"]) / observedDev
+        beta = metricSet[name]["predMean"] / observedMean
         corr = metricSet[name]["correlation"]
-        kge = 1 - math.sqrt((corr - 1) ** 2 + (alpha - 1) ** 2 + (beta - 1) ** 2)
-        calculated["kge"][i] = kge
+        calculated["kge"][i] = 1 - math.sqrt((corr - 1) ** 2 + (alpha - 1) ** 2 + (beta - 1) ** 2)
 
         calculated["names"][i] = name
 
@@ -88,7 +113,7 @@ def plotMetrics(metrics, names, colors):
         print(np.allclose(currentBasis, comparison))
         print(np.max(np.abs(currentBasis - comparison), axis=0))
 
-        for j in range(4):
+        for j in range(len(RETURN_PERIODS)):
             mismatch = np.abs(currentBasis - comparison)[:, j]
             plt.hist(mismatch[mismatch > 0])
             plt.show()
@@ -96,12 +121,12 @@ def plotMetrics(metrics, names, colors):
     print(np.nanmean(calculated[0]["f1"], axis=0))
     print(np.nanmean(calculated[1]["f1"], axis=0))
 
-    labels = ["1 Year Return Period", "2 Year Return Period", "5 Year Return Period", "10 Year Return Period"]
+    labels = [f"{period} Year Return Period" for period in RETURN_PERIODS]
 
     def plotMetric(m, name):
-        plt.figure(figsize=(8, 4))
-        for i in range(4):
-            plt.subplot(1, 4, i + 1)
+        plt.figure(figsize=(2.7 * len(RETURN_PERIODS), 4))
+        for i in range(len(RETURN_PERIODS)):
+            plt.subplot(1, len(RETURN_PERIODS), i + 1)
             plt.title(labels[i])
             for j, metricSet in enumerate(calculated):
                 scores = metricSet[m][:, i].T
@@ -195,7 +220,7 @@ def plotMetrics(metrics, names, colors):
     plt.show()
 
     tests = ["f1", "nrmse", "nse", "kge"]
-    testNames = ["1 Year Flood F1", "2 Year Flood F1", "5 Year Flood F1", "10 Year Flood F1", "NRMSE", "NSE", "KGE"]
+    testNames = [f"{period} Year Flood F1" for period in RETURN_PERIODS] + ["NRMSE", "NSE", "KGE"]
     floodHubIndex = names.index("Flood Hub")
     floodHubMetrics = calculated[floodHubIndex]
 
@@ -213,7 +238,7 @@ def plotMetrics(metrics, names, colors):
             y = floodHubMetrics[test][yIdx]
 
             if test == "f1":
-                for k in range(4):
+                for k in range(len(RETURN_PERIODS)):
                     xSample = x[:, k]
                     ySample = y[:, k]
                     mask = np.logical_and(~np.isnan(xSample), ~np.isnan(ySample))
@@ -227,7 +252,8 @@ def plotMetrics(metrics, names, colors):
                 samples.append(np.sum(mask))
                 values.append(pValue)
             
-        print(f"{names[i]} P-Values:\n\t{"\n\t".join([f'{testNames[j]} (N={samples[j]}): {values[j]}' for j in range(len(testNames))])}")
+        lines = "\n\t".join(f"{testNames[j]} (N={samples[j]}): {values[j]}" for j in range(len(testNames)))
+        print(f"{names[i]} P-Values:\n\t{lines}")
 
 
 # paths = ["2026-01-24 05-33 Combo ChebBlock5", "2026-01-25 06-45 FloodHub"]

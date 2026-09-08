@@ -23,8 +23,7 @@
         "lstm": {
             "input_size": 256,
             "hidden_size": 256,
-            "num_layers": 1,
-            "batch_first": true
+            "num_layers": 1
         },
         "stack": {
             "layer": {
@@ -59,8 +58,7 @@
         "lstm": {
             "input_size": 256,
             "hidden_size": 256,
-            "num_layers": 1,
-            "batch_first": true
+            "num_layers": 1
         },
         "stack": {
             "layer": {

@@ -112,6 +112,33 @@ parallel implementation for review before swapping in.
   If it reports mismatches, treat `utils/data/pipeline/` as unverified and
   fix before ever pointing `train.py` at it.
 
+## Config options added 2026-09-08
+
+All optional, all with defaults that keep existing configs working:
+
+| key | default | meaning |
+|---|---|---|
+| `targetTransform` | `"cbrt"` | variance-stabilizing warp applied before the global z-score: `linear` (the old behaviour), `cbrt`, `sqrt`, `log`. Measured over 245 GRDC series, `cbrt` takes pooled target skew from +6.6 to +0.85 and the spread of per-gauge standard deviations from 23x to 4.2x, while still leaving a 2-year flood ~1.8 sigma out — `log` flattens that to +1.18 sigma and stops floods being distinguishable. |
+| `basinScale` | `null` | per-basin divisor for the target. `"riveratlas"` divides by `DIS_AV_CMS / CATCH_SKM`, the reach's long-term mean specific discharge. Must come from **static attributes**, never from the gauge record: a per-basin z-score is not invertible at an ungauged basin. Off by default until the printed `corr(log static, log observed)` diagnostic confirms the static estimate is good on this data. |
+| `returnPeriods` | `[2, 5, 10]` | flood thresholds in years. The old list started at 1, and `max(1 - 1/1, 0.01)` resolves to the 1st percentile — a low-flow threshold ~50% of days exceed. |
+| `folds` / `fold` | `round(1/(1-dataSplit))` / `0` | gauge-level k-fold. Membership is `sha1(f"{seed}:{gaugeID}") % folds`, so it is invariant to gauge order and count. |
+| `pointEstimate` | `"median"` | statistic the metrics are computed from: `mean`, `median`, or `q<percentile>` (e.g. `q90`). Closed-form, ~260x cheaper than the 10,000-sample Monte-Carlo mean it replaces. |
+| `hindcastWeight` | `1.0` | weight on the encoder's final history step in the loss. Previously the hindcast head received no gradient at all. |
+| `evalEvery` | `10` | steps between metric/test-batch evaluations. |
+| `clipNorm` | `1.0` | gradient-norm clip. `0` disables. |
+| `amp` | bf16 on CUDA if supported | mixed-precision autocast. |
+
+`migrateMetrics.py` rewrites existing `checkpoints/*/metrics.json` onto the
+current schema: it un-swaps the `targetMean`/`targetDev` keys (which made every
+previously reported KGE wrong) and drops the legacy 1-year threshold column.
+It is idempotent and git holds the originals. `compare.py` also handles
+un-migrated files transparently via the `schema` key.
+
+Note `train.sh` regenerates `train.py` from `train.ipynb` via nbconvert, so
+**`train.ipynb` is the source of truth** for the training script — edit it, or
+edit `train.py` and re-sync, but do not expect `train.py` edits to survive a
+`train.sh` run on their own.
+
 ## Notes for making changes
 
 - When adding a new model variant, follow the existing `*Station` convention (constructor takes `Config`, `forward` returns `(hindcast, forecast)` of CMAL params) and add a matching `configs/<Name>Config.json`, then re-export it from `utils/models/__init__.py`.

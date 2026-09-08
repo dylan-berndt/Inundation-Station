@@ -84,7 +84,7 @@ def itertoolsBetter(dataIter):
             yield batch
 
 
-def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict[str: nn.Module], resume=None, deltas={}, name="", runID=None, startPoint=0):
+def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict[str: nn.Module], resume=None, deltas={}, name="", runID=None, startPoint=0, fold=None, folds=None, dataset=None):
     model = None
     optimizer = None
     train, test = None, None
@@ -98,12 +98,20 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
 
     start = datetime.now()
 
-    dataset = dataClass(config, display=True)
+    # Building the dataset takes 3.5-6 h; when sweeping folds, build it once
+    # and hand the same object to every fold.
+    if dataset is None:
+        dataset = dataClass(config, display=True)
 
-    dataset.display(grdcID="4127501")
+    # Options with defaults, so existing configs keep working unchanged.
+    pointMode = config.pointEstimate if "pointEstimate" in config else "median"
+    evalEvery = int(config.evalEvery) if "evalEvery" in config else 10
+    hindcastWeight = float(config.hindcastWeight) if "hindcastWeight" in config else 1.0
+    clipNorm = float(config.clipNorm) if "clipNorm" in config else 1.0
+    useAMP = bool(config.amp) if "amp" in config else (device.startswith("cuda") and torch.cuda.is_bf16_supported())
 
     try:
-        train, test = dataClass.split(dataset, config.dataSplit, seed=config.seed, numWorkers=12)
+        train, test = dataClass.split(dataset, config.dataSplit, seed=config.seed, numWorkers=12, fold=fold, folds=folds)
 
         # batch1 = next(iter(train))
         # dataset.info(batch1)
@@ -129,60 +137,70 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
                 optimizer.load_state_dict(stateDict)
 
         testIter = itertoolsBetter(test)
+        autocast = torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=useAMP)
+
+        def stepLoss(inputs, targets):
+            """Objective over both heads. The encoder used to receive no
+            gradient at all - `loss = objective(forecast, future)` discarded
+            the hindcast, so 7 of the 67 supervised discharge values in each
+            sample were used. Supervising the encoder's final history step
+            costs no extra forward compute."""
+            hindcast, forecast = model(inputs)
+            loss = torch.mean(objective(forecast, targets.dischargeFuture))
+            if hindcastWeight > 0 and hindcast is not None:
+                # FloodHub already emits only the last step; the graph models
+                # emit the whole history, so take the last one either way.
+                lastStep = tuple(parameter[:, -1:, :] for parameter in hindcast)
+                loss = loss + hindcastWeight * torch.mean(objective(lastStep, targets.dischargeHistory[:, -1:]))
+            return loss, forecast
 
         progress = 0
         for epoch in range(epochs):
             for inputs, targets in train:
                 inputs, targets = (inputs[0].to(device), inputs[1].to(device)), targets.to(device)
                 model.train()
-                optimizer.zero_grad()
+                optimizer.zero_grad(set_to_none=True)
 
                 metrics = {}
 
-                history, future = targets.dischargeHistory, targets.dischargeFuture
                 thresholds, means, deviations = targets.thresholds, targets.mean.unsqueeze(-1), targets.deviation.unsqueeze(-1)
                 with record_function("model_inference"):
-                    hindcast, forecast = model(inputs)
-                loss = objective(forecast, future)
+                    with autocast:
+                        loss, forecast = stepLoss(inputs, targets)
 
-                loss = torch.mean(loss)
-
-                forecast = dataset.transform.backward(torch.mean(CMAL.sample(*forecast, 10000), dim=-1))
-                future = dataset.transform.backward(future)
-
-                for eval in criterion:
-                    evaluated = criterion[eval](forecast.detach(), future.detach(), thresholds=thresholds, means=means, deviations=deviations)
-                    metrics["Train " + eval] = evaluated.detach().cpu().item()
+                loss.backward()
+                if clipNorm > 0:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), clipNorm)
+                optimizer.step()
 
                 metrics["Train Loss"] = loss.detach().cpu().item()
 
-                loss.backward()
-                optimizer.step()
+                # Metrics are the expensive half of a step, and they are
+                # rolling-buffer statistics anyway, so there is nothing to gain
+                # from recomputing them every iteration.
+                if (progress + 1) % evalEvery == 0:
+                    with torch.no_grad():
+                        prediction = dataset.transform.backward(CMAL.pointEstimate(forecast, pointMode).float().detach())
+                        observed = dataset.transform.backward(targets.dischargeFuture.detach())
+                        for eval in criterion:
+                            evaluated = criterion[eval](prediction, observed, thresholds=thresholds, means=means, deviations=deviations)
+                            metrics["Train " + eval] = evaluated.detach().cpu().item()
 
-                torch.cuda.empty_cache()
+                        model.eval()
+                        inputs1, targets1 = next(testIter)
+                        inputs1, targets1 = (inputs1[0].to(device), inputs1[1].to(device)), targets1.to(device)
+                        thresholds1 = targets1.thresholds
+                        means1, deviations1 = targets1.mean.unsqueeze(-1), targets1.deviation.unsqueeze(-1)
+                        with autocast:
+                            loss1, forecast1 = stepLoss(inputs1, targets1)
 
-                with torch.no_grad():
-                    model.eval()
-                    inputs1, targets1 = next(testIter)
-                    inputs1, targets1 = (inputs1[0].to(device), inputs1[1].to(device)), targets1.to(device)
+                        prediction1 = dataset.transform.backward(CMAL.pointEstimate(forecast1, pointMode).float())
+                        observed1 = dataset.transform.backward(targets1.dischargeFuture)
+                        for eval in criterion:
+                            evaluated = testCriterion[eval](prediction1, observed1, thresholds=thresholds1, means=means1, deviations=deviations1)
+                            metrics["Test " + eval] = evaluated.detach().cpu().item()
 
-                    history1, future1 = targets1.dischargeHistory, targets1.dischargeFuture
-                    thresholds1, means1, deviations1 = targets1.thresholds, targets1.mean.unsqueeze(-1), targets1.deviation.unsqueeze(-1)
-                    hindcast1, forecast1 = model(inputs1)
-                    loss1 = objective(forecast1, future1)
-                    loss1 = torch.mean(loss1)
-
-                    forecast1 = dataset.transform.backward(torch.mean(CMAL.sample(*forecast1, 10000), dim=-1))
-                    future1 = dataset.transform.backward(future1)
-
-                    for eval in criterion:
-                        evaluated = testCriterion[eval](forecast1.detach(), future1.detach(), thresholds=thresholds1, means=means1, deviations=deviations1)
-                        metrics["Test " + eval] = evaluated.detach().cpu().item()
-
-                    metrics["Test Loss"] = loss1.detach().cpu().item()
-
-                if (progress + 1) % 10 == 0:
-                    gc.collect()
+                        metrics["Test Loss"] = loss1.detach().cpu().item()
 
                 if run is None:
                     run = wandb.init(entity="dylanberndt123-missouri-state-university", project="Inundation-Station", config=config.serialize(),
@@ -230,11 +248,15 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
 # In[ ]:
 
 
+# Threshold index i is config.returnPeriods[i], now [2, 5, 10] years. The old
+# index 0 was a "1 year return period" that resolved to the 1st percentile of
+# the fitted distribution - a low-flow threshold exceeded on about half of all
+# days, not a flood.
 metrics = {
     "NMAE": CMALNormalizedMeanAbsolute(),
-    "1 Year Flood F1": CMALF1(batches=20, ),
-    "2 Year Flood F1": CMALF1(batches=20, sample=1),
-    "5 Year Flood F1": CMALF1(batches=20, sample=2),
+    "2 Year Flood F1": CMALF1(batches=20, sample=0),
+    "5 Year Flood F1": CMALF1(batches=20, sample=1),
+    "10 Year Flood F1": CMALF1(batches=20, sample=2),
     "NSE": CMALNSE(batches=20)
 }
 
@@ -243,9 +265,18 @@ deltas = {
     "NSE": (0.01, "max")
 }
 
-models = [HierarchicalBasinStation]
-datasets = [InundationData]
-configs = ["HierarchicalSAGEConfig.json"]
+models = [FloodHub]
+datasets = [FloodHubData]
+configs = ["FloodHubConfig.json"]
+
+# Which cross-validation folds to run. The split is now a hash of the gauge ID
+# (see utils/data/dataset.py: gaugeFold), so a fold is a fixed, reproducible
+# set of gauges that survives any change to the gauge list - and running more
+# than one fold is what separates an architecture effect from the run-to-run
+# noise that has been swamping every comparison so far.
+#   trainFolds = [0]           - single held-out fold, as before
+#   trainFolds = range(5)      - full 5-fold cross-validation
+trainFolds = [0]
 
 for m in range(len(models)):
     chosenModel = models[m]
@@ -253,9 +284,21 @@ for m in range(len(models)):
     config = Config().load(os.path.join("configs", configs[m]))
 
     name = configs[m].removesuffix("Config.json")
-    model, (train, test), prof = trainModel(config, chosenModel, chosenDataset, CMALLoss(), epochs=10, criterion=metrics, 
-                                            deltas=deltas, name=name)
-    del chosenModel, chosenDataset, model, train, test
+
+    # Built once and reused across folds; only the split changes per fold.
+    sharedDataset = chosenDataset(config, display=True)
+    totalFolds = config.folds if "folds" in config else max(2, int(round(1 / (1 - config.dataSplit))))
+
+    for fold in trainFolds:
+        foldName = f"{name} fold{fold}" if len(trainFolds) > 1 else name
+        model, (train, test), prof = trainModel(config, chosenModel, chosenDataset, CMALLoss(), epochs=10,
+                                                criterion=metrics, deltas=deltas, name=foldName,
+                                                fold=fold, folds=totalFolds, dataset=sharedDataset)
+        del model, train, test
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    del chosenModel, chosenDataset, sharedDataset
     gc.collect()
     torch.cuda.empty_cache()
 

@@ -11,6 +11,8 @@ from scipy.stats import pearson3
 from scipy.interpolate import CubicSpline
 from scipy.stats import mode
 
+import hashlib
+
 import networkx as nx
 import duckdb
 
@@ -32,8 +34,17 @@ class BasinData(Data):
         return super().__cat_dim__(key, value, *args, **kwargs)
 
 
+# Flood return periods, in years. A 1-year entry used to sit at the front of
+# this list; `max(1 - 1/1, 0.01)` evaluates to 0.01, so it was the 1st
+# PERCENTILE of the fitted distribution - a low-flow threshold that ~50% of
+# days exceed, not a flood. Removed; override via config.returnPeriods.
+DEFAULT_RETURN_PERIODS = [2, 5, 10]
+
+
 def calculateReturnPeriods(df, periods=None, maximums=True):
-    periods = [1, 2, 5, 10] if periods is None else periods
+    periods = list(DEFAULT_RETURN_PERIODS) if periods is None else list(periods)
+    if any(period <= 1 for period in periods):
+        raise ValueError(f"return periods must be > 1 year, got {periods}")
     df = df.copy()
     df['year'] = df['YYYY-MM-DD'].apply(lambda x: datetime.fromtimestamp(x)).dt.year.astype(int)
 
@@ -44,12 +55,56 @@ def calculateReturnPeriods(df, periods=None, maximums=True):
 
     returnVals = {}
     for period in periods:
-        nonExceedanceProbability = max(1 - 1 / period, 0.01)
+        nonExceedanceProbability = 1 - 1 / period
         q = pearson3.ppf(nonExceedanceProbability, skew, loc=mean, scale=std)
         returnVals[period] = 10 ** q
 
     return list(returnVals.values())
 
+
+
+# Long-term mean specific discharge of the gauge's own RiverATLAS reach, used
+# as an optional per-basin divisor for the target. It has to come from static
+# attributes rather than from the gauge record: dividing by the gauge's own
+# observed mean would put every basin on the same scale but would leave the
+# prediction un-invertible at an ungauged site, which is the setting this
+# project is about. DIS_AV_CMS / CATCH_SKM is available for every reach in
+# RiverATLAS, gauged or not.
+def staticBasinScale(row, mode):
+    if not mode:
+        return 1.0
+    if mode != "riveratlas":
+        raise ValueError(f"unknown basinScale {mode!r}; expected 'riveratlas' or null")
+    try:
+        discharge = float(row["DIS_AV_CMS"])
+        area = float(row["CATCH_SKM"])
+    except (KeyError, TypeError, ValueError):
+        return 1.0
+    if not np.isfinite(discharge) or not np.isfinite(area) or discharge <= 0 or area <= 0:
+        return 1.0
+    return discharge / area
+
+
+def reportBasinScaleQuality(observedScales, mode):
+    """Prints how well the static per-basin scale tracks the observed long-term
+    mean. The scale only helps if it is a decent estimate; if these correlate
+    poorly it is injecting noise and should be turned off."""
+    if not mode or not observedScales:
+        return
+    static = np.array([entry[1] for entry in observedScales], dtype=float)
+    observed = np.array([entry[2] for entry in observedScales], dtype=float)
+    valid = np.isfinite(static) & np.isfinite(observed) & (static > 0) & (observed > 0)
+    if valid.sum() < 10:
+        print(f"basinScale={mode}: only {int(valid.sum())} gauges have a usable static scale")
+        return
+    logRatio = np.log10(static[valid] / observed[valid])
+    correlation = np.corrcoef(np.log10(static[valid]), np.log10(observed[valid]))[0, 1]
+    print(f"basinScale={mode}: {int(valid.sum())} gauges | corr(log static, log observed) = {correlation:.3f} | "
+          f"median ratio {10 ** np.median(logRatio):.2f}x | 10-90% ratio "
+          f"{10 ** np.percentile(logRatio, 10):.2f}x-{10 ** np.percentile(logRatio, 90):.2f}x")
+    if correlation < 0.8:
+        print("  WARNING: the static scale tracks the observed mean poorly; "
+              "consider config.basinScale = null until this is understood")
 
 # Callable classes rather than closures: DataLoader workers on Windows use
 # spawn, which pickles the Dataset (including self.forecastNoise) to send to
@@ -112,6 +167,16 @@ class InundationData(Dataset):
 
         self.forecastNoise = noise
 
+        returnPeriods = list(config.returnPeriods) if "returnPeriods" in config else list(DEFAULT_RETURN_PERIODS)
+        self.returnPeriods = returnPeriods
+        transformMode = config.targetTransform if "targetTransform" in config else "cbrt"
+        # Per-basin scaling of the target, expressed as a divisor that must be
+        # obtainable WITHOUT a gauge record, so the prediction can still be
+        # returned in real units at an ungauged basin. "riveratlas" uses the
+        # long-term mean specific discharge of the gauge's own reach
+        # (DIS_AV_CMS / CATCH_SKM); None divides by 1 and changes nothing.
+        basinScaleMode = config.basinScale if "basinScale" in config else None
+
         grdcDict = {}
         pfafDict = {}
 
@@ -136,7 +201,10 @@ class InundationData(Dataset):
 
         # TODO: Check area thingies as a result of downsampling, likely redo
         for grdcID, row in riverSHP.iterrows():
-            grdcDict[grdcID] = {"Catchment": float(row["area"])}
+            grdcDict[grdcID] = {
+                "Catchment": float(row["area"]),
+                "BasinScale": staticBasinScale(row, basinScaleMode),
+            }
 
         for pfafID, row in basinSHP.iterrows():
             translateDict[row["id"]] = str(row["PFAF_ID"])
@@ -199,7 +267,7 @@ class InundationData(Dataset):
 
             grdcDict[riverID]["Time"] = linspace
             grdcDict[riverID]["Stage"] = torch.tensor(values, dtype=torch.float32)
-            grdcDict[riverID]["Thresholds"] = calculateReturnPeriods(thresholdDF)
+            grdcDict[riverID]["Thresholds"] = calculateReturnPeriods(thresholdDF, periods=returnPeriods)
             grdcDict[riverID]["Mean"] = np.mean(values)
             grdcDict[riverID]["Deviation"] = np.std(values)
 
@@ -375,6 +443,7 @@ class InundationData(Dataset):
         # TODO: Verify stability with downsampling
 
         allTargets = []
+        observedScales = []
 
         self.lengths = []
         self.indexMap = []
@@ -390,10 +459,16 @@ class InundationData(Dataset):
             calculatedArea = sum(areas)
             self.grdcDict[key]["Area"] = calculatedArea
 
-            normalizedStage = self.grdcDict[key]["Stage"] / calculatedArea
+            # `Catchment` is what __getitem__ actually divides by, so the
+            # statistics stored here have to use it too - the old code used
+            # calculatedArea and produced a mean on a different scale from the
+            # targets it was later compared against.
+            scale = self.grdcDict[key]["Catchment"] * self.grdcDict[key]["BasinScale"]
+            self.grdcDict[key]["TargetScale"] = scale
+            normalizedStage = self.grdcDict[key]["Stage"] / scale
             self.grdcDict[key]["Mean"] = torch.mean(normalizedStage).item()
             self.grdcDict[key]["Deviation"] = torch.std(normalizedStage).item()
-            allTargets.extend(normalizedStage.cpu().numpy().tolist())
+            observedScales.append((key, self.grdcDict[key]["BasinScale"], torch.mean(self.grdcDict[key]["Stage"] / self.grdcDict[key]["Catchment"]).item()))
 
             areaDiff = abs(calculatedArea - self.grdcDict[key]["Catchment"]) / self.grdcDict[key]["Catchment"]
             self.grdcDict[key]["AreaDiff"] = areaDiff
@@ -404,6 +479,8 @@ class InundationData(Dataset):
             if (areaDiff > 0.2 or self.grdcDict[key]["Catchment"] < 0) and config.excludeDiffBasins:
                 del self.grdcDict[key]
                 continue
+
+            allTargets.extend(normalizedStage.cpu().numpy().tolist())
 
             timeSeries = self.grdcDict[key]["Time"]
 
@@ -445,7 +522,9 @@ class InundationData(Dataset):
             plt.show()
 
         self.targetMean = np.mean(allTargets)
-        self.transform = streamflowProcess(np.array(allTargets))
+        self.transform = streamflowProcess(np.array(allTargets), mode=transformMode)
+        print(f"Target transform: {self.transform}")
+        reportBasinScaleQuality(observedScales, basinScaleMode)
 
         print("Index Mapping Complete")
 
@@ -540,7 +619,7 @@ class InundationData(Dataset):
         riverTime = riverTime[offset: offset + self.config.history + self.config.future]
 
         targetMean, targetDev = self.grdcDict[grdcID]["Mean"], self.grdcDict[grdcID]["Deviation"]
-        targetScale = self.grdcDict[grdcID]["Catchment"]
+        targetScale = self.grdcDict[grdcID]["TargetScale"]
 
         dischargeHistory = riverStage[offset: offset + self.config.history] / targetScale
         dischargeFuture = riverStage[offset + self.config.history: offset + self.config.history + self.config.future] / targetScale
@@ -609,7 +688,7 @@ class InundationData(Dataset):
 
             num_nodes=len(upstreamBasins),
             nodes=len(upstreamBasins),
-            area=targetScale,
+            area=self.grdcDict[grdcID]["Catchment"],
             basinArea=basinArea,
             grdcID=grdcID
         )
@@ -628,7 +707,7 @@ class InundationData(Dataset):
 
             num_nodes=len(upstreamBasins),
             nodes=len(upstreamBasins),
-            area=targetScale,
+            area=self.grdcDict[grdcID]["Catchment"],
             basinArea=basinArea,
             grdcID=grdcID
         )
@@ -707,30 +786,32 @@ class InundationData(Dataset):
                 centroid = geom.centroid
                 centroids[basinID] = (centroid.x, centroid.y)
 
-            basinIDs = [self.upstreamBasins[self.translateDict[grdcID]] for grdcID in grdcIDs]
-            basinIDs = set().union(*basinIDs)
-            for pfafID in basinIDs:
-                graph = self.graphs[pfafID]
-                for edge in graph.edges():
-                    source, target = edge
+            # One subgraph per gauge, not one per upstream basin: the gauge's
+            # own subgraph already contains every edge being drawn, and
+            # self.graphs is only guaranteed to be keyed by gauge basins.
+            drawn = set()
+            for grdcID in grdcIDs:
+                graph = self.graphs[self.translateDict[grdcID]]
+                for source, target in graph.edges():
+                    if source == target or (source, target) in drawn:
+                        continue
+                    drawn.add((source, target))
+                    if int(source) not in centroids or int(target) not in centroids:
+                        continue
                     x = [centroids[int(source)][0], centroids[int(target)][0]]
                     y = [centroids[int(source)][1], centroids[int(target)][1]]
-                    ax.plot(x, y, 'k-', alpha=0.5, linewidth=1, color="red")
+                    ax.plot(x, y, alpha=0.5, linewidth=1, color="red")
 
         plt.show()
 
     @staticmethod
-    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=4):
+    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=4, folds=None, fold=None):
         torch.manual_seed(seed)
         random.seed(seed)
         np.random.seed(seed)
 
         # TODO: More stratified subsets using dataset.lengths and geographic information
-        riverIDs = list(dataset.grdcDict.keys())
-        trainIDs = np.array(riverIDs)[np.random.choice(len(riverIDs), int(len(riverIDs) * trainSplit), replace=False)]
-        trainIndexMask = np.isin(dataset.indexMap, trainIDs)
-        trainIndex = np.arange(len(dataset))[trainIndexMask]
-        testIndex = np.arange(len(dataset))[~trainIndexMask]
+        trainIndex, testIndex, _ = splitIndices(dataset, trainSplit, seed, folds, fold)
 
         train = torch.utils.data.Subset(dataset, trainIndex)
         test = torch.utils.data.Subset(dataset, testIndex)
@@ -743,6 +824,56 @@ class InundationData(Dataset):
 
         return train, test
 
+
+
+# Gauge-level fold assignment from a hash of the gauge ID.
+#
+# The previous implementation drew random *indices* into a list whose order and
+# length come from grdcDict's insertion order:
+#
+#     np.array(riverIDs)[np.random.choice(len(riverIDs), int(len(riverIDs) * trainSplit), replace=False)]
+#
+# so adding or removing a single gauge anywhere shifted every later gauge by one
+# position and the same seed reproduced the same indices against a different
+# list. Two runs of this repository that differed by a handful of usable gauges
+# ended up sharing only 25% of their test set, which makes any comparison
+# between them invalid. Hashing the ID is invariant to order, to count, and to
+# every filter upstream of it: a gauge that disappears and comes back lands in
+# the fold it was in before.
+def gaugeFold(grdcID, folds, seed):
+    digest = hashlib.sha1(f"{seed}:{grdcID}".encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big") % folds
+
+
+def resolveFolds(config, trainSplit, folds, fold):
+    """`folds`/`fold` come from the call, else the config, else `trainSplit`
+    (0.8 -> 5 folds of 20%). Fold `fold` is held out; the rest is training."""
+    if folds is None:
+        folds = config.folds if "folds" in config else max(2, int(round(1.0 / max(1.0 - trainSplit, 1e-6))))
+    if fold is None:
+        fold = config.fold if "fold" in config else 0
+    folds, fold = int(folds), int(fold)
+    if not 0 <= fold < folds:
+        raise ValueError(f"fold {fold} out of range for {folds} folds")
+    return folds, fold
+
+
+def splitIndices(dataset, trainSplit, seed, folds, fold):
+    """Returns (trainIndex, testIndex, testIDs) over `dataset`'s sample index."""
+    config = dataset.config
+    folds, fold = resolveFolds(config, trainSplit, folds, fold)
+
+    testIDs = {grdcID for grdcID in dataset.grdcDict if gaugeFold(grdcID, folds, seed) == fold}
+    testMask = np.fromiter((grdcID in testIDs for grdcID in dataset.indexMap), dtype=bool, count=len(dataset.indexMap))
+
+    allIndices = np.arange(len(dataset))
+    trainIndex, testIndex = allIndices[~testMask], allIndices[testMask]
+
+    print(f"Fold {fold + 1}/{folds} (seed {seed}) | "
+          f"{len(dataset.grdcDict) - len(testIDs)} train gauges, {len(testIDs)} test gauges | "
+          f"{len(trainIndex)} train samples, {len(testIndex)} test samples")
+
+    return trainIndex, testIndex, testIDs
 
 
 class GraphSizeSampler(Sampler):
@@ -887,16 +1018,12 @@ class FloodHubData(InundationData):
         pass
 
     @staticmethod
-    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=4):
+    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=4, folds=None, fold=None):
         torch.manual_seed(seed)
         random.seed(seed)
         np.random.seed(seed)
 
-        riverIDs = list(dataset.grdcDict.keys())
-        trainIDs = np.array(riverIDs)[np.random.choice(len(riverIDs), int(len(riverIDs) * trainSplit), replace=False)]
-        trainIndexMask = np.isin(dataset.indexMap, trainIDs)
-        trainIndex = np.arange(len(dataset))[trainIndexMask]
-        testIndex = np.arange(len(dataset))[~trainIndexMask]
+        trainIndex, testIndex, _ = splitIndices(dataset, trainSplit, seed, folds, fold)
 
         train = torch.utils.data.Subset(dataset, trainIndex)
         test = torch.utils.data.Subset(dataset, testIndex)

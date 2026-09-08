@@ -29,6 +29,7 @@ from torch_geometric.loader import DataLoader
 from .basinGraph import loadBasinGraph, loadUpstreamStructures
 from .gauges import loadGaugeSeries
 from .joins import ensureJoinedData, era5Scales
+from ..dataset import splitIndices
 from .sampler import GraphSizeSampler
 from .samples import buildSampleIndex, filterGaugesByUpstreamCoverage
 from .staticFeatures import buildStaticFeatures
@@ -226,7 +227,7 @@ class InundationData(Dataset):
         riverTime = riverTime[offset: offset + self.config.history + self.config.future]
 
         targetMean, targetDev = self.grdcDict[grdcID]["Mean"], self.grdcDict[grdcID]["Deviation"]
-        targetScale = self.grdcDict[grdcID]["Catchment"]
+        targetScale = self.grdcDict[grdcID]["TargetScale"]
 
         dischargeHistory = riverStage[offset: offset + self.config.history] / targetScale
         dischargeFuture = riverStage[offset + self.config.history: offset + self.config.history + self.config.future] / targetScale
@@ -294,7 +295,7 @@ class InundationData(Dataset):
 
             num_nodes=len(upstreamBasins),
             nodes=len(upstreamBasins),
-            area=targetScale,
+            area=self.grdcDict[grdcID]["Catchment"],
             basinArea=basinArea,
             grdcID=grdcID
         )
@@ -313,7 +314,7 @@ class InundationData(Dataset):
 
             num_nodes=len(upstreamBasins),
             nodes=len(upstreamBasins),
-            area=targetScale,
+            area=self.grdcDict[grdcID]["Catchment"],
             basinArea=basinArea,
             grdcID=grdcID
         )
@@ -388,29 +389,34 @@ class InundationData(Dataset):
                 centroid = geom.centroid
                 centroids[basinID] = (centroid.x, centroid.y)
 
-            basinIDs = [self.upstreamBasins[self.translateDict[grdcID]] for grdcID in grdcIDs]
-            basinIDs = set().union(*basinIDs)
-            for pfafID in basinIDs:
-                graph = self.graphs[pfafID]
-                for edge in graph.edges():
-                    source, target = edge
+            # One subgraph per gauge, not one per upstream basin. The gauge's
+            # own subgraph already contains every edge being drawn, and
+            # `graphs` is only keyed by gauge basins here - indexing it by
+            # every upstream basin raised a KeyError for any gauge with more
+            # than one, which train.py's unconditional display() call hit
+            # immediately.
+            drawn = set()
+            for grdcID in grdcIDs:
+                graph = self.graphs[self.translateDict[grdcID]]
+                for source, target in graph.edges():
+                    if source == target or (source, target) in drawn:
+                        continue
+                    drawn.add((source, target))
+                    if int(source) not in centroids or int(target) not in centroids:
+                        continue
                     x = [centroids[int(source)][0], centroids[int(target)][0]]
                     y = [centroids[int(source)][1], centroids[int(target)][1]]
-                    ax.plot(x, y, 'k-', alpha=0.5, linewidth=1, color="red")
+                    ax.plot(x, y, alpha=0.5, linewidth=1, color="red")
 
         plt.show()
 
     @staticmethod
-    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=4, display=False):
+    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=4, display=False, folds=None, fold=None):
         torch.manual_seed(seed)
         random.seed(seed)
         np.random.seed(seed)
 
-        riverIDs = list(dataset.grdcDict.keys())
-        trainIDs = np.array(riverIDs)[np.random.choice(len(riverIDs), int(len(riverIDs) * trainSplit), replace=False)]
-        trainIndexMask = np.isin(dataset.indexMap, trainIDs)
-        trainIndex = np.arange(len(dataset))[trainIndexMask]
-        testIndex = np.arange(len(dataset))[~trainIndexMask]
+        trainIndex, testIndex, _ = splitIndices(dataset, trainSplit, seed, folds, fold)
 
         train = torch.utils.data.Subset(dataset, trainIndex)
         test = torch.utils.data.Subset(dataset, testIndex)
@@ -457,16 +463,12 @@ class FloodHubData(InundationData):
         pass
 
     @staticmethod
-    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=4, display=False):
+    def split(dataset, trainSplit=0.8, shuffle=True, seed=1234, numWorkers=4, display=False, folds=None, fold=None):
         torch.manual_seed(seed)
         random.seed(seed)
         np.random.seed(seed)
 
-        riverIDs = list(dataset.grdcDict.keys())
-        trainIDs = np.array(riverIDs)[np.random.choice(len(riverIDs), int(len(riverIDs) * trainSplit), replace=False)]
-        trainIndexMask = np.isin(dataset.indexMap, trainIDs)
-        trainIndex = np.arange(len(dataset))[trainIndexMask]
-        testIndex = np.arange(len(dataset))[~trainIndexMask]
+        trainIndex, testIndex, _ = splitIndices(dataset, trainSplit, seed, folds, fold)
 
         train = torch.utils.data.Subset(dataset, trainIndex)
         test = torch.utils.data.Subset(dataset, testIndex)

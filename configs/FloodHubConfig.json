@@ -22,8 +22,7 @@
         "lstm": {
             "input_size": 256,
             "hidden_size": 256,
-            "num_layers": 2,
-            "batch_first": true
+            "num_layers": 2
         },
         "head": {
             "inputDim": 256,
@@ -49,8 +48,7 @@
         "lstm": {
             "input_size": 256,
             "hidden_size": 256,
-            "num_layers": 2,
-            "batch_first": true
+            "num_layers": 2
         },
         "head": {
             "inputDim": 256,

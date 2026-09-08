@@ -24,7 +24,10 @@ from .caching import StageCache, fingerprintDirectory, fingerprintShapefile, fin
 SERIES_START = datetime(1980, 1, 1)
 SERIES_END = datetime(2023, 1, 1)
 MAX_MISSING_FRACTION = 0.1
-DEFAULT_RETURN_PERIODS = (1, 2, 5, 10)
+# A 1-year entry used to sit at the front of this list; max(1 - 1/1, 0.01)
+# evaluates to 0.01, so it was the 1st PERCENTILE of the fitted distribution -
+# a low-flow threshold that ~50% of days exceed, not a flood.
+DEFAULT_RETURN_PERIODS = (2, 5, 10)
 
 
 def calculateReturnPeriods(df, periods=None, maximums=True):
@@ -38,22 +41,47 @@ def calculateReturnPeriods(df, periods=None, maximums=True):
     skew, mean, std = logMax.skew(), logMax.mean(), logMax.std()
 
     returnVals = {}
+    if any(period <= 1 for period in periods):
+        raise ValueError(f"return periods must be > 1 year, got {periods}")
+
     for period in periods:
-        nonExceedanceProbability = max(1 - 1 / period, 0.01)
+        nonExceedanceProbability = 1 - 1 / period
         q = pearson3.ppf(nonExceedanceProbability, skew, loc=mean, scale=std)
         returnVals[period] = 10 ** q
 
     return list(returnVals.values())
 
 
+# Long-term mean specific discharge of the gauge's own RiverATLAS reach, used
+# as an optional per-basin divisor for the target. It has to come from static
+# attributes rather than from the gauge record: dividing by the gauge's own
+# observed mean puts every basin on the same scale but leaves the prediction
+# un-invertible at an ungauged site, which is the setting this project is about.
+def staticBasinScale(row, mode):
+    if not mode:
+        return 1.0
+    if mode != "riveratlas":
+        raise ValueError(f"unknown basinScale {mode!r}; expected 'riveratlas' or null")
+    try:
+        discharge = float(row["DIS_AV_CMS"])
+        area = float(row["CATCH_SKM"])
+    except (KeyError, TypeError, ValueError):
+        return 1.0
+    if not np.isfinite(discharge) or not np.isfinite(area) or discharge <= 0 or area <= 0:
+        return 1.0
+    return discharge / area
+
+
 def loadGaugeSeries(config, riverSHP, riverSHPPath=None, cacheRoot=None, force=False, verbose=True):
     """Returns {grdcID: {"Catchment", "Time", "Stage", "Thresholds", "Mean",
     "Deviation"}}, one entry per gauge whose GRDC file passed QA (<=10%
     missing, at least one valid reading)."""
+    periods = list(config.returnPeriods) if "returnPeriods" in config else list(DEFAULT_RETURN_PERIODS)
+    basinScaleMode = config.basinScale if "basinScale" in config else None
     grdcDir = os.path.join(config.path, "series", "GRDC")
     cache = StageCache(cacheRoot or os.path.join(config.path, "joined", "cache"))
 
-    keyParts = [fingerprintDirectory(grdcDir, "*.txt")]
+    keyParts = [fingerprintDirectory(grdcDir, "*.txt"), periods, basinScaleMode]
     if riverSHPPath is not None:
         keyParts.append(fingerprintShapefile(riverSHPPath))
     key = fingerprint(*keyParts)
@@ -65,7 +93,10 @@ def loadGaugeSeries(config, riverSHP, riverSHPPath=None, cacheRoot=None, force=F
 
     gaugeDict = {}
     for grdcID, row in riverSHP.iterrows():
-        gaugeDict[grdcID] = {"Catchment": float(row["area"])}
+        gaugeDict[grdcID] = {
+            "Catchment": float(row["area"]),
+            "BasinScale": staticBasinScale(row, basinScaleMode),
+        }
 
     # Not sorted: matches the original glob() order so gaugeDict's insertion
     # order - and therefore split()'s train/test partition at a fixed seed -
@@ -116,7 +147,7 @@ def loadGaugeSeries(config, riverSHP, riverSHPPath=None, cacheRoot=None, force=F
 
         gaugeDict[riverID]["Time"] = linspace
         gaugeDict[riverID]["Stage"] = torch.tensor(values, dtype=torch.float32)
-        gaugeDict[riverID]["Thresholds"] = calculateReturnPeriods(thresholdDF)
+        gaugeDict[riverID]["Thresholds"] = calculateReturnPeriods(thresholdDF, periods=periods)
         gaugeDict[riverID]["Mean"] = float(np.mean(values))
         gaugeDict[riverID]["Deviation"] = float(np.std(values))
 

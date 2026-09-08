@@ -2,16 +2,13 @@
 (`indexMap`/`offsetMap`/`graphSizes`) `__getitem__` walks, plus the global
 streamflow z-score transform.
 
-Two things are preserved on purpose, matching prior guidance on this
-codebase (declined as deliberate, isolated changes rather than refactor
-side-effects):
-  - `grdcDict[key]["Mean"/"Deviation"]` get overwritten here with
-    area-normalized statistics, but `__getitem__` actually normalizes
-    dischargeHistory/Future by `Catchment`, not by this calculated area -
-    the two don't match.
-  - `allTargets` (which feeds the global transform) is extended *before* the
-    `excludeDiffBasins` check below it, so targets from gauges later
-    excluded for a bad area-diff are still baked into the global mean/std.
+Both of the mismatches that used to live here are now fixed, matching
+`utils/data/dataset.py`:
+  - `Mean`/`Deviation` are computed against the same divisor `__getitem__`
+    uses (`TargetScale` = Catchment x BasinScale), so the per-gauge mean the
+    NSE denominator is built from is on the same scale as the targets.
+  - `allTargets` is extended *after* the `excludeDiffBasins` check, so the
+    global transform is fitted only on gauges the model actually sees.
 
 One thing is a genuine fix, not just a restructure: the original filtered
 `grdcDict`/`upstreamBasins` for gauges whose upstream ancestors were missing
@@ -65,6 +62,7 @@ class SampleIndex:
 
 def buildSampleIndex(config, grdcDict, translateDict, upstreamBasins, basinATLAS, pfafDict):
     basinArea = basinATLAS.copy().set_index("PFAF_ID").groupby(level=0).first()
+    transformMode = config.targetTransform if "targetTransform" in config else "cbrt"
 
     allTargets = []
 
@@ -82,10 +80,11 @@ def buildSampleIndex(config, grdcDict, translateDict, upstreamBasins, basinATLAS
         calculatedArea = sum(areas)
         grdcDict[key]["Area"] = calculatedArea
 
-        normalizedStage = grdcDict[key]["Stage"] / calculatedArea
+        scale = grdcDict[key]["Catchment"] * grdcDict[key].get("BasinScale", 1.0)
+        grdcDict[key]["TargetScale"] = scale
+        normalizedStage = grdcDict[key]["Stage"] / scale
         grdcDict[key]["Mean"] = torch.mean(normalizedStage).item()
         grdcDict[key]["Deviation"] = torch.std(normalizedStage).item()
-        allTargets.extend(normalizedStage.cpu().numpy().tolist())
 
         areaDiff = abs(calculatedArea - grdcDict[key]["Catchment"]) / grdcDict[key]["Catchment"]
         grdcDict[key]["AreaDiff"] = areaDiff
@@ -96,6 +95,8 @@ def buildSampleIndex(config, grdcDict, translateDict, upstreamBasins, basinATLAS
         if (areaDiff > 0.2 or grdcDict[key]["Catchment"] < 0) and config.excludeDiffBasins:
             del grdcDict[key]
             continue
+
+        allTargets.extend(normalizedStage.cpu().numpy().tolist())
 
         timeSeries = grdcDict[key]["Time"]
 
@@ -121,7 +122,7 @@ def buildSampleIndex(config, grdcDict, translateDict, upstreamBasins, basinATLAS
         graphSizes.extend([len(upstreamBasins[pfafID])] * sampleCount)
 
     targetMean = np.mean(allTargets)
-    transform = streamflowProcess(np.array(allTargets))
+    transform = streamflowProcess(np.array(allTargets), mode=transformMode)
 
     return SampleIndex(
         lengths=lengths,
