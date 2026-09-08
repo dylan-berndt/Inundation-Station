@@ -4,20 +4,40 @@
 # In[1]:
 
 
+import os
+
+# Must be set before torch is imported - the allocator reads it once, at import
+# time, so setting it afterwards (as this cell used to) had no effect at all.
+# `garbage_collection_threshold` makes the allocator release cached blocks when
+# reserved memory passes 80% of the card instead of raising OOM while holding a
+# fragmented pool, which is the failure mode on small-VRAM cards.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF",
+                      "expandable_segments:True,garbage_collection_threshold:0.8")
+
 from utils import *
 import wandb
 import gc
 from torch.profiler import profile, ProfilerActivity, record_function
 
 from dotenv import load_dotenv
-import os
 import copy
 
 load_dotenv()
 
 device = os.environ.get("DEVICE", "cuda") if torch.cuda.is_available() else 'cpu'
 print(device)
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
+
+def bfloat16Supported():
+    """True only where bfloat16 has hardware support (Ampere, sm_80+).
+
+    `torch.cuda.is_bf16_supported()` defaults to `including_emulation=True` and
+    returns True on Turing (sm_75, e.g. GTX 16xx / RTX 20xx) by falling back to
+    emulation. Autocasting there buys no tensor-core throughput and still pays
+    for a cast of every tensor, so it costs memory for nothing."""
+    if not torch.cuda.is_available():
+        return False
+    return torch.cuda.get_device_properties(torch.cuda.current_device()).major >= 8
 # os.environ["WANDB_BASE_URL"] = "https://api.wandb.ai"
 # os.environ["WANDB_START_METHOD"] = "thread"
 
@@ -108,7 +128,18 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
     evalEvery = int(config.evalEvery) if "evalEvery" in config else 10
     hindcastWeight = float(config.hindcastWeight) if "hindcastWeight" in config else 1.0
     clipNorm = float(config.clipNorm) if "clipNorm" in config else 1.0
-    useAMP = bool(config.amp) if "amp" in config else (device.startswith("cuda") and torch.cuda.is_bf16_supported())
+    useAMP = bool(config.amp) if "amp" in config else (device.startswith("cuda") and bfloat16Supported())
+    # The caching allocator is not compacting. Clearing it periodically costs a
+    # sync every N steps and prevents a fragmented pool from failing an
+    # allocation while the card still has free memory. This used to run on
+    # *every* iteration, which was most of the step time; never running it at
+    # all is not safe on a small card.
+    emptyCacheEvery = int(config.emptyCacheEvery) if "emptyCacheEvery" in config else 200
+
+    if device.startswith("cuda"):
+        properties = torch.cuda.get_device_properties(torch.cuda.current_device())
+        print(f"{properties.name} | {properties.total_memory / 1e9:.1f} GB | sm_{properties.major}{properties.minor} "
+              f"| bf16 autocast {'on' if useAMP else 'off'}")
 
     try:
         train, test = dataClass.split(dataset, config.dataSplit, seed=config.seed, numWorkers=12, fold=fold, folds=folds)
@@ -154,6 +185,35 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
                 loss = loss + hindcastWeight * torch.mean(objective(lastStep, targets.dischargeHistory[:, -1:]))
             return loss, forecast
 
+        def evaluate(metrics, forecast, targets, thresholds, means, deviations):
+            """Fills `metrics` with train- and test-batch statistics. Runs every
+            `evalEvery` steps rather than every step: these are rolling-buffer
+            statistics over the last 20 batches, so evaluating them more often
+            than the buffer turns over gains nothing and costs a full extra
+            forward pass."""
+            with torch.no_grad():
+                prediction = dataset.transform.backward(CMAL.pointEstimate(forecast, pointMode).float().detach())
+                observed = dataset.transform.backward(targets.dischargeFuture.detach())
+                for eval in criterion:
+                    evaluated = criterion[eval](prediction, observed, thresholds=thresholds, means=means, deviations=deviations)
+                    metrics["Train " + eval] = evaluated.detach().cpu().item()
+
+                model.eval()
+                inputs1, targets1 = next(testIter)
+                inputs1, targets1 = (inputs1[0].to(device), inputs1[1].to(device)), targets1.to(device)
+                thresholds1 = targets1.thresholds
+                means1, deviations1 = targets1.mean.unsqueeze(-1), targets1.deviation.unsqueeze(-1)
+                with autocast:
+                    loss1, forecast1 = stepLoss(inputs1, targets1)
+
+                prediction1 = dataset.transform.backward(CMAL.pointEstimate(forecast1, pointMode).float())
+                observed1 = dataset.transform.backward(targets1.dischargeFuture)
+                for eval in criterion:
+                    evaluated = testCriterion[eval](prediction1, observed1, thresholds=thresholds1, means=means1, deviations=deviations1)
+                    metrics["Test " + eval] = evaluated.detach().cpu().item()
+
+                metrics["Test Loss"] = loss1.detach().cpu().item()
+
         progress = 0
         for epoch in range(epochs):
             for inputs, targets in train:
@@ -179,28 +239,16 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
                 # rolling-buffer statistics anyway, so there is nothing to gain
                 # from recomputing them every iteration.
                 if (progress + 1) % evalEvery == 0:
-                    with torch.no_grad():
-                        prediction = dataset.transform.backward(CMAL.pointEstimate(forecast, pointMode).float().detach())
-                        observed = dataset.transform.backward(targets.dischargeFuture.detach())
-                        for eval in criterion:
-                            evaluated = criterion[eval](prediction, observed, thresholds=thresholds, means=means, deviations=deviations)
-                            metrics["Train " + eval] = evaluated.detach().cpu().item()
+                    try:
+                        evaluate(metrics, forecast, targets, thresholds, means, deviations)
+                    except torch.cuda.OutOfMemoryError:
+                        # A metrics pass is worth losing; a 24-hour run is not.
+                        print(f"\n[step {progress + 1}] eval pass ran out of VRAM, skipping it")
+                        torch.cuda.empty_cache()
 
-                        model.eval()
-                        inputs1, targets1 = next(testIter)
-                        inputs1, targets1 = (inputs1[0].to(device), inputs1[1].to(device)), targets1.to(device)
-                        thresholds1 = targets1.thresholds
-                        means1, deviations1 = targets1.mean.unsqueeze(-1), targets1.deviation.unsqueeze(-1)
-                        with autocast:
-                            loss1, forecast1 = stepLoss(inputs1, targets1)
-
-                        prediction1 = dataset.transform.backward(CMAL.pointEstimate(forecast1, pointMode).float())
-                        observed1 = dataset.transform.backward(targets1.dischargeFuture)
-                        for eval in criterion:
-                            evaluated = testCriterion[eval](prediction1, observed1, thresholds=thresholds1, means=means1, deviations=deviations1)
-                            metrics["Test " + eval] = evaluated.detach().cpu().item()
-
-                        metrics["Test Loss"] = loss1.detach().cpu().item()
+                if device.startswith("cuda"):
+                    metrics["Memory Allocated GB"] = torch.cuda.memory_allocated() / 1e9
+                    metrics["Memory Reserved GB"] = torch.cuda.memory_reserved() / 1e9
 
                 if run is None:
                     run = wandb.init(entity="dylanberndt123-missouri-state-university", project="Inundation-Station", config=config.serialize(),
@@ -209,6 +257,14 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
                 run.log(metrics, step=startPoint + progress + 1)
 
                 progress += 1
+
+                # Without this the previous step's outputs stay referenced
+                # while the next forward builds its graph, so peak VRAM holds
+                # two steps' activations rather than one.
+                del inputs, targets, loss, forecast, thresholds, means, deviations
+
+                if emptyCacheEvery and device.startswith("cuda") and progress % emptyCacheEvery == 0:
+                    torch.cuda.empty_cache()
 
                 print(f"\r{epoch + 1} | {progress}/{len(train)} | {(progress / len(train)) * 100:.3f}%", end="")
 

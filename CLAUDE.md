@@ -126,7 +126,35 @@ All optional, all with defaults that keep existing configs working:
 | `hindcastWeight` | `1.0` | weight on the encoder's final history step in the loss. Previously the hindcast head received no gradient at all. |
 | `evalEvery` | `10` | steps between metric/test-batch evaluations. |
 | `clipNorm` | `1.0` | gradient-norm clip. `0` disables. |
-| `amp` | bf16 on CUDA if supported | mixed-precision autocast. |
+| `emptyCacheEvery` | `200` | steps between `torch.cuda.empty_cache()` calls. `0` disables. |
+| `amp` | bf16 on **sm_80+** only | mixed-precision autocast. Gated on `get_device_properties().major >= 8`, not on `torch.cuda.is_bf16_supported()` — that defaults to `including_emulation=True` and returns True on Turing (GTX 16xx, RTX 20xx), where bf16 is emulated and autocast costs a cast per tensor for no tensor-core gain. |
+
+### CUDA out-of-memory on small cards
+
+Symptom: a deterministic OOM at the same iteration every run, with VRAM sitting
+flat well below capacity. Flat VRAM is *reserved* pool size — it stays flat
+while a single request fails to be served from a fragmented pool. The iteration
+is identical across runs because the seeded shuffle makes the allocation
+sequence identical.
+
+Four things fed it, all fixed:
+
+- `PYTORCH_CUDA_ALLOC_CONF` was assigned *after* `import torch`, so it never
+  applied. It is now set at the top of the first cell, before any import, and
+  includes `garbage_collection_threshold:0.8` so the allocator releases cached
+  blocks instead of raising OOM while holding a fragmented pool.
+- bf16 autocast was being enabled on Turing (see `amp` above).
+- The previous step's `loss`/`forecast` stayed referenced while the next
+  forward built its graph, so peak VRAM held two steps of activations.
+- The 14 rolling metric buffers held small CUDA tensors, churning varied-size
+  blocks on a 10-step cycle. `bufferable()` in `utils/models/modules.py` now
+  keeps them on the CPU; they are tiny and the arithmetic is trivial.
+
+`Memory Allocated GB` / `Memory Reserved GB` are logged to wandb every step. If
+this recurs, those two curves say immediately whether it is a leak (allocated
+climbs), fragmentation (reserved flat, allocated flat, OOM anyway) or one large
+request. Quick mitigations: raise `evalEvery`, lower `batchSize`/`nodesPerBatch`,
+or set `"amp": false`.
 
 ### Windows DataLoader workers pickle the Dataset
 

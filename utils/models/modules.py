@@ -354,6 +354,16 @@ class CMALMeanAbsolute(nn.Module):
         return torch.mean(torch.abs(yPred - yTrue))
 
 
+# Metric buffers hold their last `batches` inputs so the statistic is computed
+# over a rolling window rather than a single batch. They are kept on the CPU:
+# the tensors are small and the arithmetic is trivial, but leaving 14 of these
+# buffers churning small, varied-size blocks in VRAM fragments the caching
+# allocator, which on a small card shows up as an out-of-memory error raised
+# while the GPU still reports plenty free.
+def bufferable(*tensors):
+    return tuple(tensor.detach().to("cpu", non_blocking=False) for tensor in tensors)
+
+
 class CMALPrecision(nn.Module):
     def __init__(self, direction="above", batches=100, sample=0):
         self.direction = direction
@@ -363,7 +373,7 @@ class CMALPrecision(nn.Module):
         super().__init__()
 
     def forward(self, yPred, yTrue, thresholds, *args, **kwargs):
-        self.batches.append((yPred, yTrue, thresholds))
+        self.batches.append(bufferable(yPred, yTrue, thresholds))
 
         if len(self.batches) > self.numBatches:
             self.batches = self.batches[1:]
@@ -398,7 +408,7 @@ class CMALRecall(nn.Module):
         super().__init__()
 
     def forward(self, yPred, yTrue, thresholds, *args, **kwargs):
-        self.batches.append((yPred, yTrue, thresholds))
+        self.batches.append(bufferable(yPred, yTrue, thresholds))
 
         if len(self.batches) > self.numBatches:
             self.batches = self.batches[1:]
@@ -446,7 +456,7 @@ class CMALNSE(nn.Module):
         self.batches = []
 
     def forward(self, yPred, yTrue, means, *args, **kwargs):
-        self.batches.append((yPred, yTrue, means))
+        self.batches.append(bufferable(yPred, yTrue, means))
 
         if len(self.batches) > self.numBatches:
             self.batches = self.batches[1:]
@@ -507,7 +517,7 @@ class CMALKGE(nn.Module):
         self.numBatches = batches
 
     def forward(self, yPred, yTrue, means, deviations, *args, **kwargs):
-        self.batches.append((yPred, yTrue, means, deviations))
+        self.batches.append(bufferable(yPred, yTrue, means, deviations))
 
         if len(self.batches) > self.numBatches:
             self.batches = self.batches[1:]
