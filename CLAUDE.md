@@ -129,6 +129,17 @@ All optional, all with defaults that keep existing configs working:
 | `emptyCacheEvery` | `200` | steps between `torch.cuda.empty_cache()` calls. `0` disables. |
 | `amp` | bf16 on **sm_80+** only | mixed-precision autocast. Gated on `get_device_properties().major >= 8`, not on `torch.cuda.is_bf16_supported()` — that defaults to `including_emulation=True` and returns True on Turing (GTX 16xx, RTX 20xx), where bf16 is emulated and autocast costs a cast per tensor for no tensor-core gain. |
 
+### diagnoseGPU.py
+
+`python diagnoseGPU.py [ConfigName.json]` builds the real model from a real
+config and pushes a real forward+backward through it at batch sizes from 8 to
+512, with cuDNN on and off, then runs 30 sustained steps at the configured
+batch size. About a minute, and it answers the questions a failed training run
+takes hours to answer: the largest batch that fits, whether cuDNN or the
+allocator is what is failing, and whether peak memory drifts across steps (a
+retained reference) or stays flat (fragmentation). `--device cpu` checks that a
+config loads and the shapes line up, without memory numbers.
+
 ### CUDA out-of-memory on small cards
 
 Symptom: a deterministic OOM at the same iteration every run, with VRAM sitting
@@ -140,9 +151,16 @@ sequence identical.
 Four things fed it, all fixed:
 
 - `PYTORCH_CUDA_ALLOC_CONF` was assigned *after* `import torch`, so it never
-  applied. It is now set at the top of the first cell, before any import, and
-  includes `garbage_collection_threshold:0.8` so the allocator releases cached
-  blocks instead of raising OOM while holding a fragmented pool.
+  applied. It is now set at the top of the first cell, before any import, as
+  `garbage_collection_threshold:0.8`, so the allocator releases cached blocks
+  instead of raising OOM while holding a fragmented pool.
+  `expandable_segments:True` is deliberately **not** in that default: it routes
+  allocation through CUDA virtual-memory mapping, and cuDNN's RNN workspace
+  request can then fail as `CUDNN_STATUS_INTERNAL_ERROR` (which is how cuDNN
+  usually reports being unable to allocate). Set it in the shell to try it.
+  `config.cudnn: false` is the other escape hatch — it drops to PyTorch's
+  native RNN kernels, which are slower but allocate in small pieces rather than
+  one contiguous workspace.
 - bf16 autocast was being enabled on Turing (see `amp` above).
 - The previous step's `loss`/`forecast` stayed referenced while the next
   forward built its graph, so peak VRAM held two steps of activations.

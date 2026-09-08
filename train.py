@@ -8,11 +8,16 @@ import os
 
 # Must be set before torch is imported - the allocator reads it once, at import
 # time, so setting it afterwards (as this cell used to) had no effect at all.
+#
 # `garbage_collection_threshold` makes the allocator release cached blocks when
-# reserved memory passes 80% of the card instead of raising OOM while holding a
-# fragmented pool, which is the failure mode on small-VRAM cards.
-os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF",
-                      "expandable_segments:True,garbage_collection_threshold:0.8")
+# reserved memory passes 80% of the card, instead of raising OOM while holding a
+# fragmented pool - the failure mode on small-VRAM cards.
+#
+# `expandable_segments:True` is deliberately NOT set here. It changes allocation
+# to CUDA virtual-memory mapping, and cuDNN's RNN workspace request can come
+# back as CUDNN_STATUS_INTERNAL_ERROR under it, particularly on Windows. Set it
+# in the shell if you want to try it on Linux.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "garbage_collection_threshold:0.8")
 
 from utils import *
 import wandb
@@ -135,11 +140,20 @@ def trainModel(config, modelClass, dataClass, objective, epochs, criterion: dict
     # *every* iteration, which was most of the step time; never running it at
     # all is not safe on a small card.
     emptyCacheEvery = int(config.emptyCacheEvery) if "emptyCacheEvery" in config else 200
+    # CUDNN_STATUS_INTERNAL_ERROR out of an LSTM is usually cuDNN failing to get
+    # its workspace rather than a real internal fault. Setting config.cudnn to
+    # false falls back to PyTorch's native RNN kernels: slower, but it allocates
+    # in small pieces instead of one contiguous workspace.
+    if "cudnn" in config:
+        torch.backends.cudnn.enabled = bool(config.cudnn)
 
     if device.startswith("cuda"):
         properties = torch.cuda.get_device_properties(torch.cuda.current_device())
-        print(f"{properties.name} | {properties.total_memory / 1e9:.1f} GB | sm_{properties.major}{properties.minor} "
-              f"| bf16 autocast {'on' if useAMP else 'off'}")
+        free, total = torch.cuda.mem_get_info()
+        print(f"{properties.name} | {total / 1e9:.1f} GB total, {free / 1e9:.1f} GB free | "
+              f"sm_{properties.major}{properties.minor} | bf16 autocast {'on' if useAMP else 'off'} | "
+              f"cuDNN {'on' if torch.backends.cudnn.enabled else 'off'} | "
+              f"alloc conf {os.environ.get('PYTORCH_CUDA_ALLOC_CONF', '(default)')}")
 
     try:
         train, test = dataClass.split(dataset, config.dataSplit, seed=config.seed, numWorkers=12, fold=fold, folds=folds)
