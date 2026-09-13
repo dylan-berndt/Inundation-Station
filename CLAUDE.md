@@ -300,10 +300,14 @@ peak, which is what `configs/HierarchicalSAGE6GBConfig.json` targets
 (`amp: false` — TU116 has no tensor cores at all; `evalEvery` 25; history 60 to
 match `FloodHubConfig.json`).
 
-**`numWorkers` must be 0 for the graph model on this machine.** The Dataset is
-17.7 GB resident and Windows spawns workers by pickling it, so one worker is
-another ~17 GB against 5.8 GB free. FloodHub's Dataset on the same machine is
-only 1.3 GB resident, which is why 4 workers is fine there and not here.
+`numWorkers: 2` is fine for the graph model, established empirically:
+`earnest-plant-121` held 2 train workers for 31 h on this machine at 92-98%
+host memory, availableMB bottoming at 576 MB, with no failure. An earlier note
+here called for 0 on the theory that a crashed run had exhausted host RAM; that
+run was a power cut, and the theory was wrong. The `__getstate__` drop on the
+Dataset is doing its job - the main process is 14.3 GB resident but a worker's
+pickled payload is far smaller. Headroom is thin, so watch
+`system.proc.memory.availableMB` before raising it further.
 
 Note SAGE also sets `rolling: 30`, which triples the ERA5 channel count (21 vs
 FloodHub's 7) — if the point is a like-for-like comparison against FloodHub,
