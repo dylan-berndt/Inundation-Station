@@ -343,6 +343,16 @@ sequential graph convolutions per forward (60 timesteps x 2 layers x 8
 SAGEConv), which is also why an A100 is only ~2x a 1660 Super here and why GPU
 utilisation sits near 55%: the model is kernel-launch bound, not FLOP bound.
 
+## Research state
+
+`RESEARCH_STATE.md` at the repo root is the research-side companion to this
+file: the run inventory with GPUs attached, what has been measured versus
+inferred, the point-estimate confound that currently blocks every model
+comparison, the resolved test-loss-divergence question, the HydroBASINS
+resolution ceiling, corrections to earlier wrong conclusions, and the ranked
+list of next experiments. Read it before drawing any conclusion from a training
+run or a `metrics.json`.
+
 ## Notes for making changes
 
 - When adding a new model variant, follow the existing `*Station` convention (constructor takes `Config`, `forward` returns `(hindcast, forecast)` of CMAL params) and add a matching `configs/<Name>Config.json`, then re-export it from `utils/models/__init__.py`.
