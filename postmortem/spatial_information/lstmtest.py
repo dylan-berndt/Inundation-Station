@@ -1,7 +1,6 @@
 import numpy as np, pandas as pd, torch, torch.nn as nn, sys, time
 from feats import ema, snow, groupSeries
-import os
-SP=os.environ.get("SP","scratch")
+SP="scratch"
 torch.set_num_threads(4)
 D=pd.read_pickle(f"{SP}/gaugedata.pkl")
 variant=sys.argv[1]; seed=int(sys.argv[2]); SEQ=60 if variant=="lumped60" else 30; K=3

@@ -13,3 +13,6 @@ Scripts behind `DIAGNOSIS.md` at the repo root. Set `SP` to a scratch directory;
 | coherence, lag, ridge lumped / routing-bands / random-bands | `infotest.py` | above |
 | memory length and log-mean aggregation | `rank.py` | above |
 | regional LSTM: lumped / routing / random (lumped60 = 60-day-memory variant, not used in DIAGNOSIS.md) | `lstmtest.py <variant> <seed>` | above, CPU torch |
+| hourly test: GRDC→USGS site match, USGS 15-min → hourly | `usgs_match.py`, `usgs_fetch.py` | NWIS web services |
+| AORC v1.1 cell→basin masks, streamed basin-mean hourly precip 2007–2024 | `aorc_masks.py`, `aorc_fetch.py` | AWS `noaa-nws-aorc-v1-1-1km` (anonymous) |
+| hourly arrays + hourly/daily/ERA5 grouping test | `build_hourly.py`, `hourlytest.py` | above |

@@ -5,12 +5,15 @@ items are referenced, not restated. Scripts: `postmortem/spatial_information/`.
 
 ## Conclusion
 
-At a daily step, on level-7 basins forced by ERA5-Land, there is no routing
-information for any architecture to extract. Rainfall is too coherent within a
-catchment, and sub-basin travel-time differences are shorter than the time step. The
-graph models' extra capacity goes into fitting the training catchments instead, so
-they generalise worse to new ones. The binding constraint is **time resolution**,
-then the forcing's real spatial resolution. The graph structure is not the cause.
+At a daily step on level-7 basins there is no routing information for any
+architecture to extract. Travel-time differences between sub-basins are mostly
+hours, shorter than the time step, so aggregating to days removes them. At an hourly
+step with observation-based rainfall (AORC), a small routing-specific signal appears
+(Δr ≈ +0.015), and it vanishes when the same data are aggregated to days (§2b).
+The graph models' extra capacity goes into fitting the training catchments instead,
+so they generalise worse to new ones. The binding constraint is **time
+resolution**. Rainfall source changes overall skill but not the routing signal. The
+graph structure is not the cause.
 
 ## 1. The GNN added no dynamics skill
 
@@ -29,7 +32,7 @@ term `1 − r²`, the one routing should reduce.
 
 (`decompose.py`)
 
-## 2. The information is absent, measured on real data
+## 2. At a daily step the information is absent (ERA5, GRDC)
 
 55 test gauges, 8–43 level-7 nodes, median 37,000 km², 893 upstream ERA5 basins,
 GRDC daily discharge. The tests fit on each catchment's own past (gauged temporal
@@ -49,25 +52,77 @@ a nonlinear learner.
 travel-time kernel hᵢ. Write hᵢ = h̄ + δhᵢ and Rᵢ = R̄ + δRᵢ. A lumped LSTM sees
 h̄ ∗ R̄ and learns h̄ (the mean unit hydrograph) through its memory. All it loses is
 **Σᵢ δhᵢ ∗ δRᵢ**, the product of two small factors:
-- **Kernel differences:** at most 1 day, against a response kernel spanning many
-  days. The catchment low-pass filters them.
+- **Kernel differences:** at most 1 day at a daily step (hourly: median 6 h, §2b),
+  against a response kernel spanning many days. The catchment low-pass filters them.
 - **Rainfall differences:** small, because daily rainfall is 82 % coherent across
   nodes.
 
 Spatial structure has only this second-order term to work with.
 
+## 2b. Hourly vs daily on identical data (AORC, USGS)
+
+31 US gauges from §2: the 36 matched to USGS sites minus 5 without ≥ 3 years of
+15-minute discharge. 9–43 nodes, 2007–2024. Same per-gauge ridge design as §2:
+temporal 65/35 split, whole year scored. The same data are run three ways:
+
+| run | rainfall | step |
+|---|---|---|
+| hourly | AORC | hourly |
+| daily | AORC | daily means of the same data |
+| ERA5 | ERA5-Land | daily |
+
+**Groupings compared:**
+- lumped;
+- thirds by travel distance;
+- random thirds (5 draws);
+- **contiguous** thirds along the compass axis least correlated with travel distance.
+
+The contiguous control separates timing from upstream-vs-downstream geography.
+
+**Metric.** Correlation r in cube-root space, the dynamics term. Per-gauge NSE was
+unstable on some semi-arid and regulated rivers (see assumptions), so r is used.
+
+| travel-distance minus … | hourly AORC | daily AORC | daily ERA5 |
+|---|---|---|---|
+| random | **+0.015**, 21/31, p = 0.05 | +0.002, 17/31, p = 0.54 | +0.003, p = 0.57 |
+| contiguous | **+0.013**, 22/31, p = 0.012 | +0.006, p = 0.38 | +0.006, p = 0.26 |
+| (contiguous − random) | +0.001, p = 0.66 | −0.000 | −0.001 |
+
+- **Hourly response lag:** median 17 h from the near third; far-minus-near median
+  **6 h** (IQR 2–27 h).
+- **Rainfall source:** at a daily step AORC improves overall skill over ERA5 (lumped,
+  cube-root NSE +0.19, 23/31, p = 0.02), but the routing signal is absent with both.
+- **An earlier 11-gauge impression** (a daily routing gain with AORC) did not hold
+  across all 31.
+
+**Assumptions:**
+- ERA5-Land daily values (UTC days) are held constant for that day's 24 hours.
+- The snow fraction of AORC rainfall is ERA5 snowfall ÷ total precipitation.
+- Melt is degree-day melt from daily mean temperature, spread evenly over 24 hours.
+- 433 hours (0.27 %) missing from AORC across the whole domain are set to 0.
+- Hourly training uses every 3rd hour; all test hours are scored.
+- Ridge predictions are clipped to [min, 1.2×max] of the training target, which
+  stops collinear-lag blow-ups. NSE at some gauges is still unstable.
+- AORC hours are labelled at the hour end and USGS at the hour start. This shifts
+  absolute lags by up to 1 h, not the near-vs-far difference.
+
+**Reading:** a routing signal exists at sub-daily scale, passes the geography
+control, and is small. It disappears on daily aggregation of the same data.
+(`usgs_match.py`, `usgs_fetch.py`, `aorc_masks.py`, `aorc_fetch.py`,
+`build_hourly.py`, `hourlytest.py`)
+
 ## 3. Ranking the candidate causes
 
-1. **Time step (primary).** Distance-based travel-time spreads of ~1.5–2 days
-   collapse to 0–1 day at daily resolution, and the 5–8 h offset between ERA5's UTC
-   days and GRDC's local days blurs what remains.
-2. **Forcing resolution (secondary).** ERA5-Land precipitation is essentially ERA5's
-   ~31 km precipitation interpolated to 9 km. A level-7 node is ~48 km across, so
-   finer basins (level 10) would mostly split an interpolated field. Finer space only
-   helps once finer time exposes the δh factor.
-3. **Graph structure (not the cause).** The tests in §2 use no graph at all and still
-   find nothing. Mean aggregation, early pooling and one hop per day are poor fits
-   for routing, but they cannot matter while the information is absent.
+1. **Time step (primary, now tested).** Far-vs-near travel-time differences are
+   mostly hours (median 6 h). The routing signal is present at hourly resolution and
+   gone at daily resolution on the same data (§2b).
+2. **Forcing (affects skill, not routing).** AORC beats ERA5 overall at a daily step,
+   but neither carries a daily routing signal (§2b). ERA5-Land precipitation is
+   ERA5's ~31 km field interpolated to 9 km, so finer basins on ERA5 would mostly
+   split an interpolated field.
+3. **Graph structure (not the cause).** The tests in §2 and §2b use no graph at all.
+   Mean aggregation, early pooling and one hop per day are poor fits for routing,
+   but they cannot matter while the information is absent.
 4. **Task design (same order as 1).** The future window's weather is true ERA5
    (`IdentityNoise`), so there is no forecast error for upstream state to correct.
    Skill is flat over lead days 1–7: FloodHub F1@2yr 0.371 → 0.351, SAGE 0.34–0.35.
@@ -96,13 +151,11 @@ Continued fitting widens the predictions, so more days cross the flood threshold
 F1 rises. It also narrows the predictive scale `b`, so held-out NLL rises. Both
 follow from fitting the training catchments ever more closely.
 
-## Decisive next tests (no large training)
+## Remaining notes
 
-- **Hourly:** for the US gauges among the 55, use NOAA AORC (~1 km hourly, 1979–)
-  with USGS instantaneous discharge, and rerun §2's routing-vs-random test. A gain
-  here would confirm time resolution as the constraint.
-- **Spatial:** rerun §2 at daily resolution with Stage IV (4 km). A null result here
-  would confirm spatial resolution isn't binding at a daily step.
+- The §2b effect is small relative to the scale of the full problem. Whether an
+  hourly GNN can turn Δr ≈ 0.015 into a flood-skill gain in the *ungauged* setting
+  is untested.
 - **Forecast setting:** WeatherNext has no reanalysis, and its 0.1° hourly archive
   only starts 2026-01-01. It can replace the true-ERA5 future window, but not the
   historical forcing.
@@ -111,5 +164,6 @@ follow from fitting the training catchments ever more closely.
 
 - The §2 gauges are those whose full upstream set was reachable through the Drive
   listing (truncated at 5,500 files); graphs there go up to 43 nodes.
+- §2b: 31 gauges, per-gauge linear fits, marginal p-values (0.01–0.07).
 - Only one SAGE run was evaluated.
 - The wandb grouping uses loss scale as a proxy for the target transform.
