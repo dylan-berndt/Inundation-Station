@@ -1,150 +1,115 @@
-# Why the spatio-temporal graph models do not beat the lumped baseline
+# Why spatial structure did not help — new findings, 2026-10
 
-2026-10-13. Companion to `RESEARCH_STATE.md` and `postmortem/README.md`, which list the
-engineering defects. This file argues the *scientific* cause. Scripts:
-`postmortem/spatial_information/`. Every number is measured unless marked *inferred*.
+Only what is new relative to `RESEARCH_STATE.md` and `postmortem/README.md`; known
+items are referenced, not restated. Scripts: `postmortem/spatial_information/`.
 
-## Answer
+## Conclusion
 
-The graph cannot route rainfall better than the lumped LSTM because, at a **daily**
-time step on **level-7** basins driven by **ERA5**, there is almost no routing
-information left to extract. What little remains is far smaller than the noise
-between runs. On top of that, the experiment removes the setting where routing pays
-off: the "forecast" weather is the reanalysis itself, and no upstream discharge is
-ever observed. The extra capacity the graph does add gets spent elsewhere. With only
-~650 training catchments, it learns to recognise the training catchments, and it
-generalises worse to new ones. The biggest gap in the information the model sees is
-memory (snowpack, soil and groundwater storage), not space.
+At a daily step, on level-7 basins forced by ERA5-Land, there is no routing
+information for any architecture to extract. Rainfall is too coherent within a
+catchment, and sub-basin travel-time differences are shorter than the time step. The
+graph models' extra capacity goes into fitting the training catchments instead, so
+they generalise worse to new ones. The binding constraint is **time resolution**,
+then the forcing's real spatial resolution. The graph structure is not the cause.
 
-## The chain of logic
+## 1. The GNN added no dynamics skill
 
-**1. The error that matters is hydrograph dynamics, not volume.**
-NSE splits as `1 − NSE ≈ (1 − r²) + (α − r)² + β²`: dynamics, variance scaling and
-bias. Across all 9 evaluated runs, **83–87 %** of the per-gauge error is the
-dynamics term `1 − r²`. Variance scaling (~5 %) and bias (~4 %) are small.
-Routing is supposed to fix exactly this term, so the GNN had room to win.
+NSE decomposes as `1 − NSE ≈ (1 − r²) + (α − r)² + β²`: dynamics, variance scaling
+and bias. In all 9 evaluated runs, **83–87 %** of per-gauge error is the dynamics
+term `1 − r²`, the one routing should reduce.
 
-**2. The GNN extracted zero extra dynamics.**
-On the 40 test gauges shared by SAGE and FloodHub, median Δr (SAGE − FloodHub) =
-**+0.001** (p = 0.97). Two equivalent lumped models (Combo − FloodHub) differ by the
-same +0.001. Δr does not grow with graph size (ρ = +0.17, p = 0.29). The lumped model
-also shows no "lumping penalty": its r is flat against catchment area (ρ = −0.05,
-p = 0.49). If area-averaging were destroying routing information, large catchments
-would suffer most. They don't.
-
-**3. The information isn't there at this resolution.**
-Real ERA5 and GRDC data for 55 test gauges (8–43 level-7 nodes, median 37,000 km²,
-893 upstream basins):
-
-| measurement | value |
+| comparison, 40 shared test gauges | median Δr |
 |---|---|
-| node daily-precip variance explained by the catchment mean | **82 %** (wet days 51 %) |
-| response-lag difference, farthest vs nearest third of the area | **0 d** at 35/55 gauges, 1 d at 14/55 |
-| ridge, gauged temporal split: inputs grouped by travel distance vs **random** grouping | **+0.0015 NSE** (p = 0.42) |
-| regional LSTM, same comparison, 5 seeds each | LSTM_ROUTING |
-| for scale — seasonal memory vs a 60-day window (ridge) | **+0.23 NSE** (p = 4e-10) |
-| for scale — LSTM_MEMORY_LABEL | LSTM_MEMORY |
+| SAGE − FloodHub | **+0.001** (p = 0.97) |
+| Combo − FloodHub (two equivalent lumped models, noise reference) | +0.001 |
 
-Grouping inputs by travel distance helps no more than splitting the catchment at
-random. Both tests are *gauged* (fit on each catchment's own past), so this is an
-upper bound on what a model could extract in the ungauged setting.
+- Δr does not grow with node count (ρ = +0.17, p = 0.29).
+- FloodHub's r is flat against catchment area (ρ = −0.05). Lumping costs nothing
+  measurable even in the largest catchments.
 
-*Theory.* Write the outlet flow as Σᵢ hᵢ ∗ Rᵢ: each sub-basin's runoff Rᵢ convolved
-with its travel-time kernel hᵢ. Split each into the area mean plus a deviation:
-hᵢ = h̄ + δhᵢ and Rᵢ = R̄ + δRᵢ. Everything a lumped model can see is h̄ ∗ R̄; the
-cross terms average out. The only term it loses is **Σᵢ δhᵢ ∗ δRᵢ**: kernel
-heterogeneity times forcing heterogeneity. Both factors are small here:
-- Forcing: 82 % coherence at ~9 km ERA5 over ~2,300 km² nodes.
-- Kernels: lag differences are ≤ 1 day, while the catchment's own response kernel
-  spans many days, so the catchment low-pass filters the difference away.
+(`decompose.py`)
 
-A product of two small factors is second order. The lumped LSTM already learns
-h̄ (the mean unit hydrograph) through its temporal memory. "Spatial feature
-extraction" therefore has only this second-order term to work with.
+## 2. The information is absent, measured on real data
 
-**4. The experiment removes routing's remaining value.**
-The future window's weather is the true ERA5 (`IdentityNoise`), and no discharge is an
-input. So the task is pure simulation. Skill is flat across lead days: FloodHub
-F1@2yr goes 0.371 → 0.351 over days 1–7, and SAGE's stays at 0.34–0.35.
+55 test gauges, 8–43 level-7 nodes, median 37,000 km², 893 upstream ERA5 basins,
+GRDC daily discharge. The tests fit on each catchment's own past (gauged temporal
+split), so they bound what any ungauged-basin model could extract.
 
-Routing earns its keep operationally when water already in the network will arrive
-regardless of how wrong the forecast is. That requires uncertain forecast weather
-and/or an observed or simulated upstream flow state. RiverMamba's spatial ablation
-(−8.45 F1) is measured in exactly that setting: HRES forecasts plus GloFAS discharge
-as input. In this repository that setting does not exist.
+| measurement | result |
+|---|---|
+| node daily-precipitation variance explained by the catchment mean | 82 % (51 % on wet days) |
+| response-lag difference, farthest vs nearest third of the area | 0 d at 35/55 gauges, 1 d at 14/55 |
+| ridge: inputs grouped by travel distance vs **random** grouping | +0.0015 NSE (p = 0.42) |
+| regional LSTM, same comparison, 5 seeds × 3 variants | **−0.001 NSE (p = 0.60), Δr −0.003**; seed noise of the median 0.01–0.03 |
 
-**5. The extra capacity buys catchment memorisation instead.**
-These are the wandb runs from the same era with comparable target scaling (12 graph,
-14 lumped). Train NSE is equal (p = 0.63), but the train − held-out NSE gap is
-**0.139 vs 0.062** (p = 0.0006). The SAGE edge-ablation test (`RESEARCH_STATE.md` §6)
-shows the model does use topology: deleting edges moves predictions by 0.8–3× their
-magnitude. Yet Δr = 0. Topology changes the output without improving it.
-*Inferred:* the graph and its ~277 static attributes per node work as a fingerprint
-of each training catchment, not as a routing operator. That is the easiest way to
-lower training loss when outlet supervision carries almost no routing signal.
+Grouping by travel distance is no better than random grouping, in either a linear or
+a nonlinear learner.
 
-**6. So more epochs would not help.**
-In a prediction-in-ungauged-basins (PUB) setting, the effective sample size is
-roughly the number of catchments (~650), not the 10 M windows, and those windows are
-heavily autocorrelated. Held-out NSE peaks at a median of **0.42 epochs**; 84 % of
-runs peak before 1 epoch. The FloodHub run trained to 4.5 epochs fell from 0.60 to
-0.48 NSE. The two runs trained to 8.7 epochs peaked at 0.31 epochs.
+*Why.* Outlet flow is Σᵢ hᵢ ∗ Rᵢ: each sub-basin's runoff Rᵢ convolved with its
+travel-time kernel hᵢ. Write hᵢ = h̄ + δhᵢ and Rᵢ = R̄ + δRᵢ. A lumped LSTM sees
+h̄ ∗ R̄ and learns h̄ (the mean unit hydrograph) through its memory. All it loses is
+**Σᵢ δhᵢ ∗ δRᵢ**, the product of two small factors:
+- **Kernel differences:** at most 1 day, against a response kernel spanning many
+  days. The catchment low-pass filters them.
+- **Rainfall differences:** small, because daily rainfall is 82 % coherent across
+  nodes.
 
-## The test-loss divergence
+Spatial structure has only this second-order term to work with.
 
-Read it as a separate symptom of point 5, not a contradiction of it. The asymmetric
-Laplace negative log-likelihood (NLL) is roughly `log b + |e|/b`. The scale `b` is
-learned from training catchments, where residuals keep shrinking. On unseen
-catchments `|e|` stops shrinking early, so held-out NLL climbs roughly in proportion
-to 1/b. That is overconfidence on new catchments.
+## 3. Ranking the candidate causes
 
-In the 14 runs with long post-minimum logs:
-- test loss moves opposite to train loss (median Spearman **−0.68**);
-- it moves *with* test F1@2yr (**+0.62**);
-- it is unrelated to test NSE (**+0.02**).
+1. **Time step (primary).** Distance-based travel-time spreads of ~1.5–2 days
+   collapse to 0–1 day at daily resolution, and the 5–8 h offset between ERA5's UTC
+   days and GRDC's local days blurs what remains.
+2. **Forcing resolution (secondary).** ERA5-Land precipitation is essentially ERA5's
+   ~31 km precipitation interpolated to 9 km. A level-7 node is ~48 km across, so
+   finer basins (level 10) would mostly split an interpolated field. Finer space only
+   helps once finer time exposes the δh factor.
+3. **Graph structure (not the cause).** The tests in §2 use no graph at all and still
+   find nothing. Mean aggregation, early pooling and one hop per day are poor fits
+   for routing, but they cannot matter while the information is absent.
+4. **Task design (same order as 1).** The future window's weather is true ERA5
+   (`IdentityNoise`), so there is no forecast error for upstream state to correct.
+   Skill is flat over lead days 1–7: FloodHub F1@2yr 0.371 → 0.351, SAGE 0.34–0.35.
 
-The same continued fit both reduces shrinkage (larger predicted variance → more
-threshold crossings → F1 up; see `postmortem` F6) and narrows `b` (held-out NLL up).
-The divergence is a real calibration failure, not a logging artefact. Don't
-early-stop on it, but calibrate `b` on held-out catchments before trusting any
-predictive interval.
+## 4. What the extra capacity did instead
 
-## Hypotheses tested
+Comparable wandb runs: 12 graph, 14 lumped, same era and target scaling.
 
-| hypothesis | verdict | evidence |
-|---|---|---|
-| GNN receives no gradient / is disconnected | true only for Combo | `postmortem` F1; SAGE edges are live (§6 of RESEARCH_STATE) |
-| too few epochs | **rejected** | skill peaks < 1 epoch (point 6) |
-| GNN fails to extract routing that exists | **rejected** — nothing to extract | points 2–3 |
-| lumping loses routing information at daily / level-7 / ERA5 | **rejected** (≤ 0.002 NSE) | point 3 |
-| task design removes routing's value | **supported** | lead-flat skill (point 4) |
-| graph capacity → catchment overfitting | **supported** | gap 0.139 vs 0.062 (point 5) |
-| averaging log-precipitation (geometric mean) handicaps FloodHub | **rejected** | −0.002 NSE vs arithmetic mean, p = 0.80 |
-| volume / bias errors dominate | **rejected** | bias ≈ 4 % of error budget |
-| missing long memory (60-day window) | **supported, largest effect measured** | +0.23 NSE ridge; LSTM row above |
+| | graph | lumped | p |
+|---|---|---|---|
+| train NSE | equal | equal | 0.63 |
+| train − held-out NSE gap | **0.139** | **0.062** | 0.0006 |
 
-## What would make space pay
+The SAGE edge-ablation (`RESEARCH_STATE.md` §6) shows predictions do depend on
+topology, yet Δr = 0. *Inferred:* the topology and per-node attributes act as a
+catchment fingerprint, not a routing operator. (`gap.py`)
 
-1. **Fix memory first.** Use a 365-day history or ERA5-Land state variables (snow
-   water equivalent, soil water). By our measurement this lever is ~100× larger than
-   routing.
-2. **Give the graph something a lumped model cannot have:** hourly forcing, a
-   forecast-error setting (HRES vs ERA5), or upstream discharge state.
-3. **Impose routing, don't learn it from outlet supervision.** The positive PUB
-   results use *fixed* physical routing over lumped-trained LSTMs: +0.11 KGE for
-   ungauged basins > 2,000 km², HESS 28, 2107 (2024). Learned topology shows no gain
-   even with upstream gauges as inputs (Kirschstein & Sun, ICML 2024).
-4. **More catchments, not more epochs** (GRDC-Caravan, ~5k). Run 3+ seeds per arm:
-   the run-to-run noise floor (±0.06 NSE) exceeds every architecture effect measured
-   here.
+## 5. Test-loss divergence — new evidence for RESEARCH_STATE §3
+
+Taken over the 14 runs with long logs after the test-loss minimum, test loss:
+- moves opposite to train loss (median Spearman −0.68);
+- moves *with* test F1@2yr (+0.62);
+- is unrelated to test NSE (+0.02).
+
+Continued fitting widens the predictions, so more days cross the flood threshold and
+F1 rises. It also narrows the predictive scale `b`, so held-out NLL rises. Both
+follow from fitting the training catchments ever more closely.
+
+## Decisive next tests (no large training)
+
+- **Hourly:** for the US gauges among the 55, use NOAA AORC (~1 km hourly, 1979–)
+  with USGS instantaneous discharge, and rerun §2's routing-vs-random test. A gain
+  here would confirm time resolution as the constraint.
+- **Spatial:** rerun §2 at daily resolution with Stage IV (4 km). A null result here
+  would confirm spatial resolution isn't binding at a daily step.
+- **Forecast setting:** WeatherNext has no reanalysis, and its 0.1° hourly archive
+  only starts 2026-01-01. It can replace the true-ERA5 future window, but not the
+  historical forcing.
 
 ## Limits
 
-- The 55-gauge physical test covers gauges whose full upstream set was reachable
-  through the Drive listing (truncated at 5,500 ERA5 files). It is a gauged upper
-  bound with a simple snow proxy.
-- Graph sizes there top out at 43 nodes. The 30 test gauges with ≥ 32 nodes show the
-  same flat lumped-model r (median 0.763).
-- SAGE has one evaluated run, with 40 test gauges shared with FloodHub.
-- The wandb comparisons group runs by loss scale as a proxy for target transform.
-- The `results/*.png` figures predate the 2026-09 evaluation fixes and were not used.
+- The §2 gauges are those whose full upstream set was reachable through the Drive
+  listing (truncated at 5,500 files); graphs there go up to 43 nodes.
+- Only one SAGE run was evaluated.
+- The wandb grouping uses loss scale as a proxy for the target transform.

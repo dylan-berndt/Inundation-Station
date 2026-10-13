@@ -12,4 +12,4 @@ Scripts behind `DIAGNOSIS.md` at the repo root. Set `SP` to a scratch directory;
 | per-gauge arrays | `build.py` | above |
 | coherence, lag, ridge lumped / routing-bands / random-bands | `infotest.py` | above |
 | memory length and log-mean aggregation | `rank.py` | above |
-| regional LSTM: lumped / routing / random / lumped60 | `lstmtest.py <variant> <seed>` | above, CPU torch |
+| regional LSTM: lumped / routing / random (lumped60 = 60-day-memory variant, not used in DIAGNOSIS.md) | `lstmtest.py <variant> <seed>` | above, CPU torch |
