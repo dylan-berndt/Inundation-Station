@@ -16,3 +16,4 @@ Scripts behind `DIAGNOSIS.md` at the repo root. Set `SP` to a scratch directory;
 | hourly test: GRDC→USGS site match, USGS 15-min → hourly | `usgs_match.py`, `usgs_fetch.py` | NWIS web services |
 | AORC v1.1 cell→basin masks, streamed basin-mean hourly precip 2007–2024 | `aorc_masks.py`, `aorc_fetch.py` | AWS `noaa-nws-aorc-v1-1-1km` (anonymous) |
 | hourly arrays + hourly/daily/ERA5 grouping test | `build_hourly.py`, `hourlytest.py` | above |
+| peak-factor (daily-mean understatement of hourly peaks) | `peakfactor.py` | `hourly.pkl` from `build_hourly.py` |

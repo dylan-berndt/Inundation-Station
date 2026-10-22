@@ -111,6 +111,32 @@ control, and is small. It disappears on daily aggregation of the same data.
 (`usgs_match.py`, `usgs_fetch.py`, `aorc_masks.py`, `aorc_fetch.py`,
 `build_hourly.py`, `hourlytest.py`)
 
+## 2c. What a daily-mean target hides (USGS hourly, 25 gauges)
+
+The 31 gauges of §2b, keeping the 25 with ≥ 3 full years (17,000–100,000 km²).
+T = median annual maximum of hourly flow, a ~2-year flood level.
+
+| gauges | annual peak lost in the daily mean | days the hourly peak crossed T but the daily mean did not |
+|---|---|---|
+| all 25 | median **5 %** (IQR 2–9 %) | 457 of 3,345 (**14 %**) |
+| 5 semi-arid, flashy (Rio Puerco, Cimarron, Canadian, Loup, Red at Burkburnett) | **17–42 %** | 81 of 261 (**31 %**) |
+| other 20 | 1–12 % | 376 of 3,084 (12 %) |
+
+- Across these sizes the peak ratio is unrelated to drainage area (ρ = 0.10).
+  Flashiness, not size, drives it here.
+- Hourly means understate true 15-minute peaks, so all figures are conservative.
+- **Relation to Nearing et al. (2024).** They attribute weaker arid-basin skill to
+  "peaky hydrographs … difficult to simulate". Their model and observations are both
+  daily means scored daily-vs-daily (±2-day event matching), so the lost peak never
+  enters their score. Daily-evaluated skill, Flood Hub's included, therefore
+  overstates flood-warning value in flashy basins. This does not show that the target
+  *causes* their arid error. Here, flashier gauges had only slightly lower daily skill
+  (r 0.61 vs 0.68, ρ = −0.12, p = 0.57, n = 5 flashy), which is not significant.
+  Their model also does better in smaller basins, where daily averaging usually
+  compresses peaks most.
+
+(`peakfactor.py`)
+
 ## 3. Ranking the candidate causes
 
 1. **Time step (primary, now tested).** Far-vs-near travel-time differences are
